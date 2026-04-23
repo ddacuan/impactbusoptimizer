@@ -525,11 +525,19 @@ tr:hover td{background:var(--surface3)}
         </div>
       </div>
     </div>
-    <div class="card-grid-3" style="margin-top:12px">
+    <div class="alert alert-info" style="margin:14px 0 10px 0"><span class="alert-icon">ℹ</span>
+      <strong>Planning with a full applicant list?</strong> Use the ridership rate below to estimate how many families will actually ride. Most schools see 30–60% bus signup rates. Once you have real opt-in data, upload that list in Step 2 instead and set the rate to 100%.
+    </div>
+    <div class="card-grid-3" style="margin-top:4px">
+      <div class="fg">
+        <label>Expected ridership rate (%)</label>
+        <input id="opt-ridership-rate" type="number" value="100" min="1" max="100" step="1" oninput="updateRidershipPreview()">
+        <div id="ridership-preview" style="font-size:11px;color:var(--text3);margin-top:3px">Using all uploaded families.</div>
+      </div>
       <div class="fg">
         <label>Bus capacity (max riders/route)</label>
         <input id="opt-capacity" type="number" value="70" min="10" max="120">
-        <div style="font-size:11px;color:var(--text3);margin-top:3px">Routes won't exceed this many riders.</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:3px">Warning shown if any route exceeds this.</div>
       </div>
       <div class="fg">
         <label>Clustering method</label>
@@ -539,6 +547,8 @@ tr:hover td{background:var(--surface3)}
         </select>
         <div style="font-size:11px;color:var(--text3);margin-top:3px">Sector mode prevents routes from overlapping regions.</div>
       </div>
+    </div>
+    <div class="card-grid-3" style="margin-top:8px">
       <div class="fg">
         <label>Avg bus speed (mph)</label>
         <input id="opt-speed" type="number" value="18" min="8" max="40">
@@ -624,6 +634,9 @@ tr:hover td{background:var(--surface3)}
       <button class="btn btn-primary" onclick="renderFamilyList()">Preview bus list</button>
       <button class="btn btn-teal" id="btn-dl-family-docx" onclick="downloadFamilyDocx()" style="display:none">⬇ Download as .docx (opens in Google Docs)</button>
       <button class="btn btn-ghost btn-sm" onclick="window.print()">🖨 Print / PDF</button>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-top:8px">
+      💡 <strong>To open in Google Docs:</strong> download the .docx file → go to <a href="https://drive.google.com" target="_blank" style="color:var(--blue)">Google Drive</a> → drag the file in → Google will automatically convert it to a Google Doc.
     </div>
   </div>
   <div id="family-preview"></div>
@@ -835,19 +848,24 @@ function confirmAddStop() {
 // NAVIGATION
 // ══════════════════════════════════════════════════════════════
 function go(id) {
-  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('.sb-item').forEach(n=>n.classList.remove('active'));
-  const panel=document.getElementById('panel-'+id);
-  const nav=document.getElementById('nav-'+id);
-  if(!panel) return;
-  if(nav&&nav.classList.contains('locked')) return;
-  panel.classList.add('active');
-  if(nav) nav.classList.add('active');
-  window.scrollTo(0,0);
-  if(id==='map') renderMap();
-  if(id==='maps-out') renderMapsOut();
-  if(id==='family') { /* wait for button */ }
-  if(id==='communities') renderCommunitiesList();
+  try {
+    document.querySelectorAll('.panel').forEach(function(p){ p.classList.remove('active'); });
+    document.querySelectorAll('.sb-item').forEach(function(n){ n.classList.remove('active'); });
+    var panel = document.getElementById('panel-'+id);
+    var nav   = document.getElementById('nav-'+id);
+    if(!panel){ console.warn('go(): no panel found for id:', id); return; }
+    // Only block navigation via sidebar clicks on locked items — not programmatic go() calls
+    if(nav && nav.classList.contains('locked') && event && event.type === 'click') return;
+    panel.classList.add('active');
+    if(nav) nav.classList.add('active');
+    window.scrollTo(0,0);
+    if(id==='map') try{ renderMap(); }catch(e){ console.warn('renderMap error:',e); }
+    if(id==='maps-out') try{ renderMapsOut(); }catch(e){ console.warn('renderMapsOut error:',e); }
+    if(id==='communities') try{ renderCommunitiesList(); }catch(e){ console.warn('renderCommunitiesList error:',e); }
+    if(id==='optimize') try{ updateRidershipPreview(); }catch(e){}
+  } catch(err) {
+    console.error('go() error:', err);
+  }
 }
 function unlock(id){const el=document.getElementById('nav-'+id);if(el)el.classList.remove('locked');}
 function updateSidebar(){
@@ -877,42 +895,68 @@ function updateRideDisplay(){
   if(rmEl) rmEl.textContent = rm;
   if(tmEl) tmEl.textContent = dh + rm + dh;
 }
+function updateRidershipPreview() {
+  var rateEl = document.getElementById('opt-ridership-rate');
+  var previewEl = document.getElementById('ridership-preview');
+  if (!rateEl || !previewEl) return;
+  var rate = parseFloat(rateEl.value) || 100;
+  var total = S.families.length;
+  if (total === 0) { previewEl.textContent = 'Upload family addresses first (Step 2).'; return; }
+  var estimated = Math.round(total * rate / 100);
+  if (rate >= 100) {
+    previewEl.textContent = 'Using all ' + total + ' uploaded families.';
+    previewEl.style.color = 'var(--text3)';
+  } else {
+    previewEl.innerHTML = 'Estimating <strong>' + estimated + ' riders</strong> from ' + total + ' families at ' + rate + '% signup rate.';
+    previewEl.style.color = 'var(--blue)';
+  }
+}
+
+function getField(id, fallback) {
+  var el = document.getElementById(id);
+  return el ? el.value : (fallback !== undefined ? fallback : '');
+}
 function saveSetup(){
-  const name = document.getElementById('s-name').value.trim();
-  if(!name){ toast('Please enter a school name before continuing.','warn'); return; }
-  S.school = {
-    name,
-    year:        document.getElementById('s-year').value.trim(),
-    address:     document.getElementById('s-addr').value.trim(),
-    arrivalTime: document.getElementById('s-arrival').value.trim() || '7:55 AM',
-    director:    document.getElementById('s-dir').value.trim(),
-    email:       document.getElementById('s-email').value.trim()
-  };
-  S.vendor = {
-    name:        document.getElementById('v-name').value.trim(),
-    rateType:    document.getElementById('v-rate-type').value,
-    dailyRate:   parseFloat(document.getElementById('v-daily').value)   || 0,
-    mileageRate: parseFloat(document.getElementById('v-mileage').value) || 0,
-    hourlyRate:  parseFloat(document.getElementById('v-hourly').value)  || 0,
-    daysPerYear: parseInt(document.getElementById('v-days').value)      || 180,
-    minDays:     parseInt(document.getElementById('v-min-days').value)  || 180,
-    overageRate: parseFloat(document.getElementById('v-overage').value) || 0,
-    setupFee:    parseFloat(document.getElementById('v-setup-fee').value) || 0,
-    yardAddress: document.getElementById('v-yard-addr').value.trim(),
-    deadheadMax: parseInt(document.getElementById('v-deadhead-max').value) || 30,
-    rideMax:     parseInt(document.getElementById('v-ride-max').value)     || 90,
-    rideTarget:  parseInt(document.getElementById('v-ride-target').value)  || 60,
-    boundaryNorth: document.getElementById('b-north').value.trim(),
-    boundarySouth: document.getElementById('b-south').value.trim(),
-    boundaryEast:  document.getElementById('b-east').value.trim(),
-    boundaryWest:  document.getElementById('b-west').value.trim(),
-  };
-  unlock('upload');
-  unlock('communities');
-  unlock('routes-upload');
-  updateSidebar();
-  saveSession();
-  go('upload');
+  try {
+    var name = getField('s-name','').trim();
+    if(!name){ toast('Please enter a school name before continuing.','warn'); return; }
+    S.school = {
+      name:        name,
+      year:        getField('s-year','').trim(),
+      address:     getField('s-addr','').trim(),
+      arrivalTime: getField('s-arrival','7:55 AM').trim() || '7:55 AM',
+      director:    getField('s-dir','').trim(),
+      email:       getField('s-email','').trim()
+    };
+    S.vendor = {
+      name:          getField('v-name','').trim(),
+      rateType:      getField('v-rate-type','FLAT'),
+      dailyRate:     parseFloat(getField('v-daily','800'))    || 0,
+      mileageRate:   parseFloat(getField('v-mileage','0'))    || 0,
+      hourlyRate:    parseFloat(getField('v-hourly','0'))      || 0,
+      daysPerYear:   parseInt(getField('v-days','180'))        || 180,
+      minDays:       parseInt(getField('v-min-days','180'))    || 180,
+      overageRate:   parseFloat(getField('v-overage','0'))     || 0,
+      setupFee:      parseFloat(getField('v-setup-fee','0'))   || 0,
+      yardAddress:   getField('v-yard-addr','').trim(),
+      deadheadMax:   parseInt(getField('v-deadhead-max','30')) || 30,
+      rideMax:       parseInt(getField('v-ride-max','90'))     || 90,
+      rideTarget:    parseInt(getField('v-ride-target','60'))  || 60,
+      boundaryNorth: getField('b-north','').trim(),
+      boundarySouth: getField('b-south','').trim(),
+      boundaryEast:  getField('b-east','').trim(),
+      boundaryWest:  getField('b-west','').trim(),
+    };
+    unlock('upload');
+    unlock('communities');
+    unlock('routes-upload');
+    try { updateSidebar(); } catch(e){ console.warn('updateSidebar error:', e); }
+    try { saveSession(); }   catch(e){ console.warn('saveSession error:', e); }
+    go('upload');
+  } catch(err) {
+    console.error('saveSetup error:', err);
+    toast('Something went wrong saving your setup: ' + (err.message || err), 'danger', 6000);
+  }
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1061,6 +1105,7 @@ function parseAddressesFromText(text,type,filename){
       if(!addr&&addrIdx<0) addr=findAddressInRow(row);
       if(!addr||addr.length<5)continue;
       addr=cleanAddr(addr);
+      if(!addr||addr.length<6)continue;
       let name='';
       if(firstIdx>=0&&lastIdx>=0) name=(row[firstIdx]||'')+' '+(row[lastIdx]||'');
       else if(nameIdx>=0) name=row[nameIdx]||'';
@@ -1073,6 +1118,7 @@ function parseAddressesFromText(text,type,filename){
     lines.forEach(line=>{
       if(isAddressLike(line)){
         const addr=cleanAddr(line);
+        if(!addr||addr.length<6)continue;
         const geo=roughGeocode(addr);
         parsed.push({id:rndId(),name:'',address:addr,grade:'',lat:geo.lat,lon:geo.lon,type});
       }
@@ -1106,7 +1152,7 @@ function parseRoutesFromText(text,filename){
         var addr=(row[aIdx]||'').trim();
         if(!addr) continue;
         if(!routeMap[rName]) routeMap[rName]=[];
-        routeMap[rName].push({name:sName||addr.split(',')[0], address:cleanAddr(addr)});
+        var _ca1=cleanAddr(addr); if(_ca1&&_ca1.length>=6) routeMap[rName].push({name:sName||_ca1.split(',')[0], address:_ca1});
       }
     } else if(aIdx>=0){
       // Address column only — single route
@@ -1115,7 +1161,7 @@ function parseRoutesFromText(text,filename){
         var addr=(row[aIdx]||'').trim(); if(!addr) continue;
         var sName=sIdx>=0?(row[sIdx]||'').trim():'';
         if(!routeMap['Route 1']) routeMap['Route 1']=[];
-        routeMap['Route 1'].push({name:sName||addr.split(',')[0], address:cleanAddr(addr)});
+        var _ca2=cleanAddr(addr); if(_ca2&&_ca2.length>=6) routeMap['Route 1'].push({name:sName||_ca2.split(',')[0], address:_ca2});
       }
     }
   }
@@ -1136,6 +1182,7 @@ function parseRoutesFromText(text,filename){
       }
       if(currentRoute && isAddressLike(line)){
         var addr=cleanAddr(line); stopCounter++;
+        if(!addr||addr.length<6){lastNonAddrLine="";return;}
         var name=lastNonAddrLine&&lastNonAddrLine.length<80?lastNonAddrLine:('Stop '+stopCounter);
         routeMap[currentRoute].push({name:name, address:addr});
         lastNonAddrLine='';
@@ -1162,9 +1209,17 @@ function parseRoutesFromText(text,filename){
 function rndId(){return Math.random().toString(36).slice(2);}
 function splitCSVLine(line){const result=[];let cur='',inQ=false;for(let c of line){if(c==='"'){inQ=!inQ;}else if(c===','&&!inQ){result.push(cur.trim());cur='';}else cur+=c;}result.push(cur.trim());return result;}
 function findColIdx(headers,keywords){for(let i=0;i<headers.length;i++)for(const k of keywords)if(headers[i].includes(k))return i;return -1;}
-function isAddressLike(s){return/\d+\s+\w/.test(s)&&/(ave|st|blvd|way|rd|dr|ln|pl|ct|pkwy|hwy|blvd|south|north|east|west|sw|se|ne|nw)/i.test(s)&&s.length>8&&s.length<120;}
+function isAddressLike(s){
+  if(!s || s.length < 6 || s.length > 120) return false;
+  if(/[|\\]/.test(s)) return false;                          // reject pipe/backslash artifacts
+  if(/^\s*[\d|\s]+\s*$/.test(s)) return false;              // reject number-only or pipe-only strings
+  if(/^\s*\d{1,2}\s*[|,]\s*\d/.test(s)) return false;      // reject "3 | 3" or "5, 2" row patterns
+  if(!/\d+\s+\w/.test(s)) return false;                      // must start with a house number
+  if(/(ave|st|blvd|way|rd|dr|ln|pl|ct|pkwy|hwy|south|north|east|west|sw|se|ne|nw)/i.test(s)) return true;
+  return false;
+}
 function findAddressInRow(row){return row.find(c=>isAddressLike(c))||'';}
-function cleanAddr(addr){let a=addr.replace(/^[a-zA-Z]\s+/,'').replace(/\s+/g,' ').trim();if(!/seattle|federal way|auburn|kent|renton|burien|seatac|des moines|tukwila|wa\s*\d{5}/i.test(a)&&a.length<60)a+=', WA';return a;}
+function cleanAddr(addr){let a=addr.replace(/^[a-zA-Z]\s+/,'').replace(/\s+/g,' ').trim();if(/[|\\]/.test(a)||/^[\d\s,|]+$/.test(a))return '';if(!/seattle|federal way|auburn|kent|renton|burien|seatac|des moines|tukwila|wa\s*\d{5}/i.test(a)&&a.length<60)a+=', WA';return a;}
 
 function showUploadPreview(type,parsed,filename){
   const id=type+'-preview';
@@ -1234,6 +1289,7 @@ function parseCommunitiesFromText(text, filename) {
 
       if (isAddressLike(line)) {
         const addr = cleanAddr(line);
+        if(!addr||addr.length<6)return;
         const geo  = roughGeocode(addr);
         parsed.push({id:rndId(), name:addr.split(',')[0], address:addr, routePriority:'', type:inferType(line), lat:geo.lat, lon:geo.lon});
       } else if (locationKeywords.test(line) && line.length > 4 && line.length < 80) {
@@ -1514,7 +1570,7 @@ function runOptimizer(){
 
       var schoolGeo = roughGeocode(S.school.address || 'Seattle WA');
 
-      // Filter families by radius (boundaries are handled at setup — skip live geocoding)
+      // Filter families by radius
       var fams = S.families.filter(function(f){
         if(!f.lat || !f.lon) return false;
         if(maxRadius > 0 && haversine(f, schoolGeo) > maxRadius) return false;
@@ -1527,6 +1583,20 @@ function runOptimizer(){
       if(!fams.length){
         statusEl.textContent = 'No families to cluster — check your radius setting.';
         return;
+      }
+
+      // Apply ridership rate — sample families randomly at the given percentage
+      var ridershipRate = getVal('opt-ridership-rate', 100, parseFloat) / 100;
+      if(ridershipRate < 1) {
+        var targetCount = Math.max(1, Math.round(fams.length * ridershipRate));
+        // Shuffle a copy and take the first targetCount
+        var shuffled = fams.slice().sort(function() { return Math.random() - 0.5; });
+        fams = shuffled.slice(0, targetCount);
+        toast(
+          'Ridership rate ' + Math.round(ridershipRate*100) + '%: planning routes for ' +
+          fams.length + ' of ' + S.families.length + ' families.',
+          'info', 5000
+        );
       }
 
       // Run clustering — always produces exactly numRoutes routes
@@ -2283,7 +2353,11 @@ function calcCost(r){
 }
 
 // ── CFO REPORT HTML RENDERER ─────────────────────────────────
-function buildCFOHtml(costs, grand, date) {
+function buildCFOHtml(costs, grand, date, ridershipRate, totalRiders, totalFamiliesUploaded) {
+  ridershipRate = ridershipRate || 100;
+  totalRiders = totalRiders || S.routes.reduce(function(s,r){return s+r.riders.length;},0);
+  totalFamiliesUploaded = totalFamiliesUploaded || S.families.length;
+  var isEstimate = ridershipRate < 100;
   const v = S.vendor, fmt = n => '$' + Math.round(n).toLocaleString();
   const dh = v.deadheadMax || 30;
   const rows = costs.map((c,i) => {
@@ -2318,11 +2392,25 @@ function buildCFOHtml(costs, grand, date) {
     + '<div>'+( S.school.director||'')+'</div><div>'+(S.school.email||'')+'</div></div>'
     + '</div>'
 
+    // Ridership context banner
+    + (isEstimate
+        ? '<div style="background:#fef9c3;border:1px solid #fde047;border-left:4px solid #eab308;border-radius:6px;padding:12px 16px;margin-bottom:18px;font-size:12px">'
+        + '<div style="font-weight:700;color:#854d0e;margin-bottom:4px">⚠ Planning Estimate — Not Final</div>'
+        + '<div style="color:#713f12">This report is based on an estimated <strong>' + ridershipRate + '% ridership rate</strong>, '
+        + 'projecting <strong>' + totalRiders + ' riders</strong> from ' + totalFamiliesUploaded + ' uploaded families. '
+        + 'Actual costs and route structure will be refined once families complete bus opt-in forms. '
+        + 'Regenerate this report after uploading confirmed rider data.</div>'
+        + '</div>'
+        : '<div style="background:#f0fdf4;border:1px solid #86efac;border-left:4px solid #16a34a;border-radius:6px;padding:10px 16px;margin-bottom:18px;font-size:12px;color:#166534">'
+        + '✓ Based on full uploaded family list (' + totalFamiliesUploaded + ' families). Update once bus opt-in data is available.'
+        + '</div>'
+      )
+
     // Summary boxes
     + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:22px">'
     + '<div style="background:#f0f4f8;border-radius:8px;padding:12px 14px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:4px">Total Annual Cost</div><div style="font-size:22px;font-weight:700;color:#1a3a5c">'+fmt(grand)+'</div></div>'
     + '<div style="background:#f0f4f8;border-radius:8px;padding:12px 14px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:4px">Routes</div><div style="font-size:22px;font-weight:700;color:#1a3a5c">'+S.routes.length+'</div></div>'
-    + '<div style="background:#f0f4f8;border-radius:8px;padding:12px 14px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:4px">Families Served</div><div style="font-size:22px;font-weight:700;color:#1a3a5c">'+S.families.length+'</div></div>'
+    + '<div style="background:#f0f4f8;border-radius:8px;padding:12px 14px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:4px">Families Planned For</div><div style="font-size:22px;font-weight:700;color:#1a3a5c">'+totalRiders+'</div>'+(isEstimate?'<div style="font-size:10px;color:#64748b">'+ridershipRate+'% of '+totalFamiliesUploaded+' uploaded</div>':'')+'</div>'
     + '<div style="background:#f0f4f8;border-radius:8px;padding:12px 14px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:4px">Vendor</div><div style="font-size:14px;font-weight:700;color:#1a3a5c;margin-top:4px">'+(v.name||'—')+'</div><div style="font-size:11px;color:#64748b">'+v.rateType+' &mdash; '+fmt(v.dailyRate)+'/route/day</div></div>'
     + '</div>'
 
@@ -2401,19 +2489,32 @@ function generateCFO(){
   if(!S.routes.length){toast('Run the optimizer first (Step 4).','warn');return;}
   const costs=S.routes.map(r=>({...calcCost(r),route:r}));
   const grand=costs.reduce((s,c)=>s+c.total,0)+S.vendor.setupFee;
-  const totalRiders=S.families.length;
+  const totalRiders=S.routes.reduce((s,r)=>s+r.riders.length,0);
+  const totalFamiliesUploaded=S.families.length;
   const fmt=n=>'$'+Math.round(n).toLocaleString();
   const date=new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+
+  // Ridership context
+  const ridershipRate = getVal('opt-ridership-rate', 100, parseFloat);
+  const isEstimate = ridershipRate < 100;
+  const ridershipNote = isEstimate
+    ? `DRAFT — Based on ${ridershipRate}% estimated ridership rate (${totalRiders} of ${totalFamiliesUploaded} uploaded families). Actual ridership may differ once families opt in.`
+    : `Based on full uploaded family list (${totalFamiliesUploaded} families). Update once bus opt-in data is available.`;
+
   _cfoText=[
     `CFO TRANSPORTATION COST REPORT`,`${'═'.repeat(60)}`,
     `School:          ${S.school.name||'—'}`,`School Year:     ${S.school.year||'—'}`,
     `Director:        ${S.school.director||'—'} (${S.school.email||'—'})`,`Generated:       ${date}`,``,
+    isEstimate ? `⚠ PLANNING ESTIMATE — NOT FINAL` : `STATUS: Full Family List`,
+    isEstimate ? `This report uses an estimated ${ridershipRate}% ridership rate applied to ${totalFamiliesUploaded} uploaded` : '',
+    isEstimate ? `families, projecting ${totalRiders} riders. Actual costs will vary based on true opt-in data.` : '',
+    ``,
     `EXECUTIVE SUMMARY`,`${'─'.repeat(60)}`,
     `Total Annual Transportation Cost:   ${fmt(grand)}`,
     `  Base contract cost:               ${fmt(costs.reduce((s,c)=>s+c.base,0))}`,
     `  Contract / Setup Fee:             ${fmt(S.vendor.setupFee)}`,
     `Number of Routes:                   ${S.routes.length}`,
-    `Total Families Served:              ${totalRiders}`,
+    `Families Planned For:               ${totalRiders}${isEstimate?' (estimated — '+ridershipRate+'% of '+totalFamiliesUploaded+' uploaded)':''}`,
     `Vendor:                             ${S.vendor.name||'—'}`,
     `Contract Rate Type:                 ${S.vendor.rateType}`,
     `Base Daily Rate:                    ${fmt(S.vendor.dailyRate)} per route`,
@@ -2431,14 +2532,16 @@ function generateCFO(){
       `  → School: ${S.school.address||'—'}`,``
     ]),
     `ASSUMPTIONS & NOTES`,`${'─'.repeat(60)}`,
+    `• ${ridershipNote}`,
     `• Route mileage estimated from geocoded coordinates (straight-line approximation).`,
     `• Actual contract mileage may differ — confirm with ${S.vendor.name||'vendor'}.`,
     `• Overage exposure not included; review per-route overage min/day in your contract.`,
     `• All costs based on ${S.vendor.daysPerYear} school days/year.`,
     `• Recommend reviewing stop coverage before contract finalization.`,
-  ].join('\n');
-  // Render a nicely formatted HTML preview
-  const cfoHtml = buildCFOHtml(costs, grand, date);
+  ].filter(l=>l!=='').join('\n');
+
+  // Render HTML preview
+  const cfoHtml = buildCFOHtml(costs, grand, date, ridershipRate, totalRiders, totalFamiliesUploaded);
   document.getElementById('cfo-preview-card').style.display='';
   document.getElementById('cfo-text').innerHTML = cfoHtml;
   document.getElementById('btn-dl-docx').style.display='';
