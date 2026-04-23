@@ -1,0 +1,2603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bus Route Optimizer</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --navy:#0f1923;--navy2:#1a2535;--navy3:#243044;
+  --blue:#2563eb;--blue-light:#dbeafe;
+  --teal:#0d9488;--teal-light:#ccfbf1;
+  --amber:#d97706;--amber-light:#fef3c7;
+  --red:#dc2626;--red-light:#fee2e2;
+  --green:#16a34a;--green-light:#dcfce7;
+  --surface:#fff;--surface2:#f8fafc;--surface3:#f1f5f9;
+  --border:#e2e8f0;--border2:#cbd5e1;
+  --text:#0f172a;--text2:#475569;--text3:#94a3b8;
+  --font-body:'DM Sans',sans-serif;--font-mono:'DM Mono',monospace;--font-serif:'Instrument Serif',serif;
+  --r:6px;--r2:10px;--r3:14px;
+  --shadow:0 1px 3px rgba(0,0,0,.08);
+}
+html{font-family:var(--font-body);color:var(--text);background:var(--navy);font-size:14px;line-height:1.5}
+.shell{display:grid;grid-template-columns:260px 1fr;min-height:100vh}
+.sidebar{background:var(--navy);border-right:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;overflow-y:auto;position:sticky;top:0;height:100vh}
+.main{background:var(--surface2);overflow-y:auto}
+.sb-brand{padding:20px 20px 14px;border-bottom:1px solid rgba(255,255,255,.06)}
+.sb-icon{font-size:22px;margin-bottom:6px}
+.sb-title{font-family:var(--font-serif);font-size:18px;color:#fff;line-height:1.2;font-style:italic}
+.sb-sub{font-size:11px;color:rgba(255,255,255,.35);margin-top:3px;font-family:var(--font-mono)}
+.sb-school{margin:12px;padding:10px 12px;background:var(--navy2);border-radius:var(--r2);border:1px solid rgba(255,255,255,.06);display:none}
+.sb-school-label{font-size:10px;color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:.08em;font-family:var(--font-mono);margin-bottom:3px}
+.sb-school-name{font-size:13px;color:rgba(255,255,255,.8);font-weight:500}
+.sb-save{margin:0 12px 8px;padding:8px 12px;background:rgba(13,148,136,.15);border:1px solid rgba(13,148,136,.3);border-radius:var(--r2);font-size:11px;color:rgba(255,255,255,.5);font-family:var(--font-mono);display:none}
+.sb-save.active{color:var(--teal-light)}
+.sb-nav{padding:8px 0;flex:1}
+.sb-section{padding:14px 16px 4px;font-size:10px;color:rgba(255,255,255,.25);text-transform:uppercase;letter-spacing:.1em;font-family:var(--font-mono)}
+.sb-item{display:flex;align-items:center;gap:10px;padding:9px 16px;color:rgba(255,255,255,.45);cursor:pointer;border:none;background:none;width:100%;text-align:left;font-family:var(--font-body);font-size:13px;transition:all .12s;border-left:2px solid transparent}
+.sb-item:hover{color:rgba(255,255,255,.8);background:rgba(255,255,255,.04)}
+.sb-item.active{color:#fff;background:rgba(37,99,235,.18);border-left-color:var(--blue)}
+.sb-item .sb-num{width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,.08);font-size:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:var(--font-mono);color:rgba(255,255,255,.4)}
+.sb-item.active .sb-num{background:var(--blue);color:#fff}
+.sb-item.done .sb-num{background:var(--teal);color:#fff}
+.sb-item.locked{opacity:.35;cursor:not-allowed}
+.sb-footer{padding:14px 16px;border-top:1px solid rgba(255,255,255,.06);font-size:11px;color:rgba(255,255,255,.2);line-height:1.6}
+.panel{display:none;padding:32px 36px;max-width:880px}
+.panel.active{display:block}
+.ph{margin-bottom:28px}
+.ph-eyebrow{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;font-family:var(--font-mono);margin-bottom:6px}
+.ph-title{font-family:var(--font-serif);font-size:28px;color:var(--text);font-style:italic;line-height:1.2}
+.ph-desc{font-size:13px;color:var(--text2);margin-top:6px;line-height:1.6;max-width:560px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r3);padding:20px 24px;margin-bottom:16px;box-shadow:var(--shadow)}
+.card-title{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;font-family:var(--font-mono);margin-bottom:14px}
+.card-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.card-grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.fg{margin-bottom:12px}
+.fg label{display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bottom:5px}
+input[type=text],input[type=number],input[type=email],input[type=url],select,textarea{width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--r);font-family:var(--font-body);font-size:13px;color:var(--text);background:var(--surface);transition:border-color .12s;outline:none}
+input:focus,select:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+textarea{resize:vertical;min-height:80px}
+.btn{display:inline-flex;align-items:center;gap:7px;padding:9px 18px;border-radius:var(--r);font-size:13px;font-weight:500;font-family:var(--font-body);cursor:pointer;border:1px solid var(--border);background:var(--surface);color:var(--text);transition:all .12s;white-space:nowrap}
+.btn:hover{background:var(--surface3);border-color:var(--border2)}
+.btn-primary{background:var(--blue);color:#fff;border-color:var(--blue)}
+.btn-primary:hover{background:#1d4ed8}
+.btn-teal{background:var(--teal);color:#fff;border-color:var(--teal)}
+.btn-sm{padding:6px 12px;font-size:12px}
+.btn-ghost{background:transparent;border-color:transparent;color:var(--text2)}
+.btn-ghost:hover{background:var(--surface3);color:var(--text)}
+.btn-danger{background:var(--red-light);color:var(--red);border-color:var(--red)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-group{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:16px}
+/* Upload zone */
+.upload-zone{border:2px dashed var(--border2);border-radius:var(--r3);padding:24px;text-align:center;cursor:pointer;transition:all .15s;background:var(--surface2)}
+.upload-zone:hover,.upload-zone.drag{border-color:var(--blue);background:var(--blue-light)}
+.upload-zone.done{border-color:var(--teal);background:var(--teal-light)}
+.uz-icon{font-size:26px;margin-bottom:7px}
+.uz-title{font-size:14px;font-weight:500;margin-bottom:3px}
+.uz-sub{font-size:12px;color:var(--text3)}
+/* Accepted formats pills */
+.fmt-pills{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;justify-content:center}
+.fmt-pill{font-size:10px;font-family:var(--font-mono);padding:2px 8px;border-radius:10px;background:var(--surface3);border:1px solid var(--border2);color:var(--text2)}
+/* URL input row */
+.url-row{display:flex;gap:8px;margin-top:10px}
+.url-row input{flex:1}
+/* Metrics */
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:16px}
+.metric{background:var(--surface2);border:1px solid var(--border);border-radius:var(--r2);padding:12px 14px}
+.metric-val{font-size:24px;font-weight:600;line-height:1;margin-bottom:3px}
+.metric-label{font-size:11px;color:var(--text3);font-family:var(--font-mono)}
+/* Tables */
+.tbl-wrap{overflow-x:auto;border-radius:var(--r2);border:1px solid var(--border)}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{background:var(--navy);color:rgba(255,255,255,.7);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.05em;padding:9px 12px;text-align:left;font-family:var(--font-mono)}
+td{padding:8px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--surface3)}
+/* Map */
+#map{height:440px;border-radius:var(--r2);overflow:hidden;border:1px solid var(--border)}
+.map-legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:12px}
+.map-legend-item{display:flex;align-items:center;gap:6px}
+.map-legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.route-tabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:12px}
+.route-tab{padding:6px 14px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;border:1.5px solid;transition:all .12s;font-family:var(--font-mono)}
+/* Stop list */
+.stop-list{list-style:none}
+.stop-item{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
+.stop-item:last-child{border-bottom:none}
+.stop-num{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;color:#fff;margin-top:2px}
+.stop-name{font-size:13px;font-weight:500}
+.stop-addr{font-size:11px;color:var(--text3)}
+/* Alerts */
+.alert{display:flex;gap:10px;padding:12px 14px;border-radius:var(--r2);font-size:13px;margin-bottom:14px;line-height:1.5;align-items:flex-start}
+.alert-info{background:var(--blue-light);color:#1e40af;border:1px solid #bfdbfe}
+.alert-success{background:var(--green-light);color:#15803d;border:1px solid #bbf7d0}
+.alert-warn{background:var(--amber-light);color:#92400e;border:1px solid #fde68a}
+.alert-danger{background:var(--red-light);color:#b91c1c;border:1px solid #fecaca}
+.alert-icon{flex-shrink:0;font-size:15px}
+.sep{border:none;border-top:1px solid var(--border);margin:18px 0}
+.badge{display:inline-block;font-size:10px;padding:2px 7px;border-radius:20px;font-weight:600;font-family:var(--font-mono)}
+.badge-blue{background:var(--blue-light);color:#1d4ed8}
+.badge-green{background:var(--green-light);color:#15803d}
+.badge-amber{background:var(--amber-light);color:#92400e}
+.spinner{display:inline-block;width:13px;height:13px;border:2px solid var(--border2);border-top-color:var(--blue);border-radius:50%;animation:spin .65s linear infinite;vertical-align:middle;margin-right:5px}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* Session banner */
+.session-banner{background:rgba(13,148,136,.12);border:1px solid rgba(13,148,136,.25);border-radius:var(--r2);padding:10px 14px;font-size:12px;color:var(--teal-light);margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+/* CFO report */
+.cfo-report{font-family:var(--font-mono);font-size:12px;line-height:1.8;white-space:pre-wrap;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r2);padding:20px 24px;max-height:520px;overflow-y:auto}
+/* Family bus list preview */
+.bus-list-preview{background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);padding:24px;font-family:Georgia,serif;font-size:13px;line-height:1.6;max-height:600px;overflow-y:auto}
+.bus-list-header{border-bottom:3px solid #1a3a5c;padding-bottom:12px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:flex-start}
+.bus-list-school{font-size:16px;font-weight:700;color:#1a3a5c}
+.bus-list-subtitle{font-size:12px;color:#666;font-style:italic}
+.bus-list-route-header{background:#1a3a5c;color:#fff;padding:8px 12px;font-size:13px;font-weight:700;margin:16px 0 0;font-family:Arial,sans-serif}
+.bus-list-table{width:100%;border-collapse:collapse;margin-bottom:4px;font-family:Arial,sans-serif;font-size:12px}
+.bus-list-table th{background:#e2e8f0;padding:6px 10px;text-align:left;border:1px solid #d1d5db;font-size:11px;text-transform:uppercase;letter-spacing:.04em;font-weight:800;color:#000}
+.bus-list-table td{padding:7px 10px;border:1px solid #e5e7eb;vertical-align:top}
+.bus-list-table tr:nth-child(even) td{background:#f9fafb}
+@media print{
+  .sidebar,.btn-group,.session-banner,.route-tabs,.alert,.card-title{display:none!important}
+  .main{background:#fff}
+  .panel.active{padding:0}
+  .bus-list-preview,.cfo-report{max-height:none;border:none;box-shadow:none;padding:0}
+  body{background:#fff;color:#000}
+}
+
+/* ── TOAST NOTIFICATIONS ── */
+#toast-container{position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.toast{padding:12px 18px;border-radius:var(--r2);font-size:13px;font-weight:500;box-shadow:0 4px 16px rgba(0,0,0,.18);opacity:0;transform:translateY(8px);transition:all .2s;pointer-events:auto;max-width:340px;line-height:1.4}
+.toast.show{opacity:1;transform:translateY(0)}
+.toast-success{background:#15803d;color:#fff}
+.toast-warn{background:#92400e;color:#fff}
+.toast-info{background:#1e40af;color:#fff}
+.toast-danger{background:#b91c1c;color:#fff}
+/* ── ADD STOP INLINE FORM ── */
+#add-stop-form{display:none;background:var(--surface3);border:1px solid var(--border2);border-radius:var(--r2);padding:14px;margin-top:10px}
+#add-stop-form .fg{margin-bottom:8px}
+</style>
+</head>
+<body>
+<div id="toast-container"></div>
+<div class="shell">
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sb-brand">
+    <div class="sb-icon">🚌</div>
+    <div class="sb-title">Bus Route Optimizer</div>
+    <div class="sb-sub">Impact Public Schools</div>
+  </div>
+  <div class="sb-school" id="sb-school-block">
+    <div class="sb-school-label">Active school</div>
+    <div class="sb-school-name" id="sb-school-name">—</div>
+    <div class="sb-school-label" style="margin-top:6px">Status</div>
+    <div class="sb-school-name" id="sb-status-line">—</div>
+  </div>
+  <div class="sb-save" id="sb-save-indicator">⬤ Session auto-saved</div>
+  <nav class="sb-nav">
+    <div class="sb-section">Setup</div>
+    <button class="sb-item active" id="nav-setup" onclick="go('setup')"><span class="sb-num">1</span>School &amp; vendor</button>
+    <div class="sb-section">Data</div>
+    <button class="sb-item locked" id="nav-upload" onclick="go('upload')"><span class="sb-num">2</span>Upload addresses</button>
+    <button class="sb-item locked" id="nav-communities" onclick="go('communities')"><span class="sb-num">3</span>Critical communities</button>
+    <button class="sb-item locked" id="nav-routes-upload" onclick="go('routes-upload')"><span class="sb-num">4</span>Current routes (optional)</button>
+    <div class="sb-section">Optimize</div>
+    <button class="sb-item locked" id="nav-optimize" onclick="go('optimize')"><span class="sb-num">5</span>Route optimizer</button>
+    <button class="sb-item locked" id="nav-map" onclick="go('map')"><span class="sb-num">6</span>Route map</button>
+    <div class="sb-section">Outputs</div>
+    <button class="sb-item locked" id="nav-maps-out" onclick="go('maps-out')"><span class="sb-num">7</span>Google Maps links</button>
+    <button class="sb-item locked" id="nav-family" onclick="go('family')"><span class="sb-num">8</span>Family bus list</button>
+    <button class="sb-item locked" id="nav-cfo" onclick="go('cfo')"><span class="sb-num">9</span>CFO report</button>
+    <div class="sb-section">Session</div>
+    <button class="sb-item" onclick="exportSession()"><span class="sb-num">⬇</span>Export session</button>
+    <button class="sb-item" onclick="document.getElementById('fi-session').click()"><span class="sb-num">⬆</span>Import session</button>
+    <input type="file" id="fi-session" accept=".json" style="display:none" onchange="importSession(event)">
+  </nav>
+  <div class="sb-footer">Auto-saves to this browser.<br>Export session to use on another device.</div>
+</aside>
+
+<!-- MAIN -->
+<main class="main">
+
+<!-- ── 1. SETUP ── -->
+<div class="panel active" id="panel-setup">
+  <div id="session-resume-banner" style="display:none"></div>
+  <div class="ph">
+    <div class="ph-eyebrow">Step 1 of 8</div>
+    <div class="ph-title">School &amp; vendor setup</div>
+    <div class="ph-desc">Enter your school's details and transportation contract. These populate your CFO report and cost calculations automatically.</div>
+  </div>
+  <div class="card">
+    <div class="card-title">School information</div>
+    <div class="card-grid">
+      <div class="fg"><label>School name</label><input id="s-name" type="text" placeholder="e.g. Impact | Puget Sound Elementary"></div>
+      <div class="fg"><label>School year</label><input id="s-year" type="text" placeholder="e.g. 2025-2026"></div>
+    </div>
+    <div class="fg"><label>School address (final stop on all routes)</label><input id="s-addr" type="text" placeholder="Full address including city, state, ZIP"></div>
+    <div class="fg"><label>School arrival time (when bus must arrive)</label><input id="s-arrival" type="text" placeholder="e.g. 7:55 AM" value="7:55 AM"></div>
+    <div class="card-grid">
+      <div class="fg"><label>Director name</label><input id="s-dir" type="text"></div>
+      <div class="fg"><label>Director email</label><input id="s-email" type="email"></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">Transportation vendor &amp; contract</div>
+    <div class="card-grid">
+      <div class="fg"><label>Vendor name</label><input id="v-name" type="text" placeholder="e.g. Zum, FirstStudent"></div>
+      <div class="fg"><label>Rate type</label>
+        <select id="v-rate-type" onchange="toggleRateFields()">
+          <option value="FLAT">Flat — fixed daily rate per route</option>
+          <option value="MILEAGE">Mileage — per mile</option>
+          <option value="HOURLY">Hourly — per hour</option>
+          <option value="HYBRID">Hybrid — daily + mileage</option>
+        </select>
+      </div>
+    </div>
+    <div class="card-grid">
+      <div class="fg" id="vf-daily"><label>Base daily rate ($/route/day)</label><input id="v-daily" type="number" value="800" min="0"></div>
+      <div class="fg" id="vf-mileage" style="display:none"><label>Mileage rate ($/mile)</label><input id="v-mileage" type="number" value="0" step="0.01"></div>
+      <div class="fg" id="vf-hourly" style="display:none"><label>Hourly rate ($/hr)</label><input id="v-hourly" type="number" value="0" step="0.01"></div>
+      <div class="fg"><label>School days per year</label><input id="v-days" type="number" value="180"></div>
+    </div>
+    <div class="card-grid">
+      <div class="fg"><label>Minimum billable days/year</label><input id="v-min-days" type="number" value="180"></div>
+      <div class="fg"><label>Time overage ($/15 min over)</label><input id="v-overage" type="number" value="0" step="0.01"></div>
+    </div>
+    <div class="fg"><label>Contract / setup fee ($ one-time)</label><input id="v-setup-fee" type="number" value="0"></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Bus yard &amp; route time limits</div>
+    <div class="alert alert-info" style="margin-bottom:14px"><span class="alert-icon">ℹ</span>
+      <strong>Deadhead</strong> = non-revenue travel between the vendor yard and your first/last stop. The optimizer will flag routes that exceed your scholar ride time limit.
+    </div>
+    <div class="fg"><label>Vendor yard address</label><input id="v-yard-addr" type="text" placeholder="e.g. 1234 Industrial Way, Auburn, WA 98001"></div>
+    <div class="card-grid-3">
+      <div class="fg"><label>Max deadhead time (min, each way)</label><input id="v-deadhead-max" type="number" value="30" min="0" max="120" oninput="updateRideDisplay()"></div>
+      <div class="fg"><label>Max scholar ride time (min)</label><input id="v-ride-max" type="number" value="90" min="20" max="180" oninput="updateRideDisplay()"></div>
+      <div class="fg"><label>Target scholar ride time (min)</label><input id="v-ride-target" type="number" value="60" min="20" max="180"></div>
+    </div>
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r2);padding:10px 14px;font-size:12px;color:var(--text2)">
+      Total max bus day = deadhead (30 min) + scholar ride (<span id="ride-max-display">90</span> min) + deadhead (30 min) = <strong><span id="total-max-display">150</span> min</strong>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">Geographic boundaries <span style="font-size:10px;font-weight:400;color:var(--text3)">(optional)</span></div>
+    <div class="card-desc">Set hard limits on how far routes can extend in any direction. The optimizer will exclude any family address outside these boundaries and flag them as unserviceable.</div>
+    <div class="card-grid">
+      <div class="fg"><label>Northern boundary (street / address / city)</label><input id="b-north" type="text" placeholder="e.g. NE 145th St, Seattle — leave blank for no limit"></div>
+      <div class="fg"><label>Southern boundary (street / address / city)</label><input id="b-south" type="text" placeholder="e.g. S 272nd St, Federal Way"></div>
+    </div>
+    <div class="card-grid">
+      <div class="fg"><label>Eastern boundary (street / address / city)</label><input id="b-east" type="text" placeholder="e.g. Maple Valley Hwy — leave blank for no limit"></div>
+      <div class="fg"><label>Western boundary (street / address / city)</label><input id="b-west" type="text" placeholder="e.g. Puget Sound shoreline"></div>
+    </div>
+    <div class="alert alert-info" style="margin-top:4px"><span class="alert-icon">ℹ</span>
+      Boundaries are approximate — the tool uses the geocoded coordinates of the boundary address to set a lat/lon limit. After running the optimizer, any excluded families appear in a warning list so you can follow up with them directly.
+    </div>
+  </div>
+  <div class="btn-group">
+    <button class="btn btn-primary" onclick="saveSetup()">Save &amp; continue →</button>
+    <button class="btn btn-ghost btn-sm" onclick="clearSession()">Clear all &amp; start over</button>
+  </div>
+</div>
+
+<!-- ── 2. UPLOAD ADDRESSES ── -->
+<div class="panel" id="panel-upload">
+  <div class="ph">
+    <div class="ph-eyebrow">Step 2 of 8</div>
+    <div class="ph-title">Upload family addresses</div>
+    <div class="ph-desc">Paste a Google Sheets or Google Doc link for new applicant families and/or current enrolled students. The address column will be auto-detected.</div>
+  </div>
+  <div class="card">
+    <div class="card-title">New applicant families</div>
+    <div class="alert alert-info" style="margin-bottom:14px"><span class="alert-icon">ℹ</span>
+      Upload a <strong>PDF</strong>, <strong>Word doc (.docx)</strong>, or <strong>CSV</strong> directly — or paste a <strong>Google Doc / Sheets link</strong>. The address column will be auto-detected.
+    </div>
+    <div class="upload-zone" id="uz-new"
+      onclick="document.getElementById('fi-new').click()"
+      ondragover="dzOver(event,'uz-new')"
+      ondragleave="dzLeave('uz-new')"
+      ondrop="dzDrop(event,'new')">
+      <div class="uz-icon">📄</div>
+      <div class="uz-title">Drop file here or click to browse</div>
+      <div class="uz-sub">PDF, Word (.docx), or CSV with family addresses</div>
+      <div class="fmt-pills">
+        <span class="fmt-pill">PDF</span>
+        <span class="fmt-pill">DOCX</span>
+        <span class="fmt-pill">CSV</span>
+      </div>
+    </div>
+    <input type="file" id="fi-new" accept=".csv,.txt,.pdf,.docx,.doc" style="display:none" onchange="handleFileUpload(event,'new')">
+    <div style="margin-top:14px;font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">Or paste a Google Doc / Sheets link</div>
+    <div class="url-row">
+      <input type="url" id="url-new" placeholder="https://docs.google.com/…">
+      <button class="btn btn-primary btn-sm" onclick="loadFromUrl('new')">Load</button>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-top:5px">Make sure sharing is set to <strong>"Anyone with the link can view."</strong></div>
+    <div id="new-preview" style="margin-top:12px"></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Current enrolled students</div>
+    <div class="alert alert-info" style="margin-bottom:14px"><span class="alert-icon">ℹ</span>
+      Optional — helps weight stops toward existing riders. Upload a <strong>PDF</strong>, <strong>Word doc (.docx)</strong>, or <strong>CSV</strong> — or paste a <strong>Google Doc / Sheets link</strong>.
+    </div>
+    <div class="upload-zone" id="uz-cur"
+      onclick="document.getElementById('fi-cur').click()"
+      ondragover="dzOver(event,'uz-cur')"
+      ondragleave="dzLeave('uz-cur')"
+      ondrop="dzDrop(event,'cur')">
+      <div class="uz-icon">📄</div>
+      <div class="uz-title">Drop file here or click to browse</div>
+      <div class="uz-sub">PDF, Word (.docx), or CSV with student addresses</div>
+      <div class="fmt-pills">
+        <span class="fmt-pill">PDF</span>
+        <span class="fmt-pill">DOCX</span>
+        <span class="fmt-pill">CSV</span>
+      </div>
+    </div>
+    <input type="file" id="fi-cur" accept=".csv,.txt,.pdf,.docx,.doc" style="display:none" onchange="handleFileUpload(event,'cur')">
+    <div style="margin-top:14px;font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">Or paste a Google Doc / Sheets link</div>
+    <div class="url-row">
+      <input type="url" id="url-cur" placeholder="https://docs.google.com/…">
+      <button class="btn btn-primary btn-sm" onclick="loadFromUrl('cur')">Load</button>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-top:5px">Make sure sharing is set to <strong>"Anyone with the link can view."</strong></div>
+    <div id="cur-preview" style="margin-top:12px"></div>
+  </div>
+  <div class="btn-group">
+    <button class="btn" onclick="go('setup')">← Back</button>
+    <button class="btn btn-primary" id="btn-upload-next" onclick="go('communities')" disabled>Continue →</button>
+  </div>
+</div>
+
+
+<!-- ── 3. CRITICAL COMMUNITIES ── -->
+<div class="panel" id="panel-communities">
+  <div class="ph">
+    <div class="ph-eyebrow">Step 3 of 9</div>
+    <div class="ph-title">Critical communities</div>
+    <div class="ph-desc">Upload priority enrollment zones from your outreach director. The optimizer will anchor a bus stop near each one — even if no family addresses are clustered there yet. These appear as ⭐ stops in the editor and on the map.</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">What counts as a critical community?</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:4px">
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r2);padding:12px 14px;font-size:12px">
+        <div style="font-weight:600;margin-bottom:4px">Apartment complexes</div>
+        <div style="color:var(--text3)">High-density housing where families cluster</div>
+      </div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r2);padding:12px 14px;font-size:12px">
+        <div style="font-weight:600;margin-bottom:4px">Community anchors</div>
+        <div style="color:var(--text3)">Boys & Girls Clubs, libraries, community centers</div>
+      </div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r2);padding:12px 14px;font-size:12px">
+        <div style="font-weight:600;margin-bottom:4px">Enrollment hotspots</div>
+        <div style="color:var(--text3)">Neighborhoods where outreach is actively happening</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Upload critical communities list</div>
+    <div class="alert alert-info" style="margin-bottom:10px"><span class="alert-icon">ℹ</span>
+      <strong>Recommended format: CSV or Google Sheets</strong> with these columns:
+      <div style="margin:6px 0 2px 0;font-family:var(--font-mono);font-size:11px;background:#fff;border:1px solid #bfdbfe;border-radius:4px;padding:6px 10px;color:#1e40af">
+        Community Name &nbsp;|&nbsp; Address &nbsp;|&nbsp; Route Priority <span style="opacity:.5">(optional)</span>
+      </div>
+      Address is optional — leave it blank and fill it in the table below. <strong>Avoid uploading documents with extra text</strong> (paragraphs, headers, notes) — the parser works best with a clean list. Use the CSV template below as a starting point.
+    </div>
+    <div class="alert alert-warn" style="margin-bottom:10px"><span class="alert-icon">⚠</span>
+      <strong>After loading, always review the table below.</strong> The document reader may occasionally pick up extra lines as communities. Remove any incorrect entries using the ✕ button before continuing.
+    </div>
+    <div class="upload-zone" id="uz-communities"
+      onclick="document.getElementById('fi-communities').click()"
+      ondragover="dzOver(event,'uz-communities')"
+      ondragleave="dzLeave('uz-communities')"
+      ondrop="dzDrop(event,'communities')">
+      <div class="uz-icon">⭐</div>
+      <div class="uz-title">Drop file here or click to browse</div>
+      <div class="uz-sub">PDF, Word (.docx), or CSV with community names &amp; addresses</div>
+      <div class="fmt-pills">
+        <span class="fmt-pill">PDF</span>
+        <span class="fmt-pill">DOCX</span>
+        <span class="fmt-pill">CSV</span>
+      </div>
+    </div>
+    <input type="file" id="fi-communities" accept=".csv,.txt,.pdf,.docx,.doc" style="display:none" onchange="handleFileUpload(event,'communities')">
+    <div style="margin-top:14px;font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">Or paste a Google Doc / Sheets link</div>
+    <div class="url-row">
+      <input type="url" id="url-communities" placeholder="https://docs.google.com/…">
+      <button class="btn btn-primary btn-sm" onclick="loadFromUrl('communities')">Load</button>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-top:5px">Make sure sharing is set to <strong>"Anyone with the link can view."</strong></div>
+    <div id="communities-preview" style="margin-top:12px"></div>
+    <div style="margin-top:12px">
+      <button class="btn btn-sm btn-ghost" onclick="downloadCommunitiesTemplate()">⬇ Download CSV template</button>
+    </div>
+  </div>
+
+  <!-- Manual entry -->
+  <div class="card">
+    <div class="card-title">Or add communities manually</div>
+    <div id="communities-manual-list"></div>
+    <button class="btn btn-sm" onclick="addCommunityRow()" style="margin-top:8px">+ Add community</button>
+  </div>
+
+  <!-- Current list -->
+  <div class="card" id="communities-list-card" style="display:none">
+    <div class="card-title">Critical communities loaded (<span id="cc-count">0</span>)</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Community name</th><th>Address</th><th>Route priority</th><th>Type</th><th></th></tr></thead>
+        <tbody id="cc-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="btn-group">
+    <button class="btn" onclick="go('upload')">← Back</button>
+    <button class="btn btn-primary" onclick="go('routes-upload')">Continue →</button>
+  </div>
+</div>
+
+<!-- ── 3. CURRENT ROUTES UPLOAD ── -->
+<div class="panel" id="panel-routes-upload">
+  <div class="ph">
+    <div class="ph-eyebrow">Step 4 of 9 — Optional</div>
+    <div class="ph-title">Upload current routes</div>
+    <div class="ph-desc">Have existing routes? Upload them and the optimizer will show exactly what changed — new stops added, old stops removed — so you can make informed decisions.</div>
+  </div>
+  <div class="card">
+    <div class="card-title">Current routes — upload or paste a link</div>
+    <div class="alert alert-info" style="margin-bottom:14px"><span class="alert-icon">ℹ</span>
+      Upload a <strong>PDF</strong>, <strong>Word doc (.docx)</strong>, or <strong>CSV</strong> directly — or paste a <strong>Google Doc / Sheets link</strong>. The parser looks for route names and stop addresses automatically.
+    </div>
+
+    <!-- File drop zone -->
+    <div class="upload-zone" id="uz-routes"
+      onclick="document.getElementById('fi-routes').click()"
+      ondragover="dzOver(event,'uz-routes')"
+      ondragleave="dzLeave('uz-routes')"
+      ondrop="dzDrop(event,'routes')">
+      <div class="uz-icon">🗂️</div>
+      <div class="uz-title">Drop file here or click to browse</div>
+      <div class="uz-sub">PDF, Word (.docx), or CSV with route names &amp; stop addresses</div>
+      <div class="fmt-pills">
+        <span class="fmt-pill">PDF</span>
+        <span class="fmt-pill">DOCX</span>
+        <span class="fmt-pill">CSV</span>
+      </div>
+    </div>
+    <input type="file" id="fi-routes" accept=".csv,.txt,.pdf,.docx,.doc" style="display:none" onchange="handleFileUpload(event,'routes')">
+
+    <!-- Google Doc / Sheets link -->
+    <div style="margin-top:14px;font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">Or paste a Google Doc / Sheets link</div>
+    <div class="url-row">
+      <input type="url" id="url-routes" placeholder="https://docs.google.com/…">
+      <button class="btn btn-primary btn-sm" onclick="loadFromUrl('routes')">Load</button>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-top:5px">Make sure sharing is set to <strong>"Anyone with the link can view."</strong></div>
+
+    <div id="routes-preview" style="margin-top:12px"></div>
+    <div style="margin-top:12px">
+      <button class="btn btn-sm btn-ghost" onclick="downloadRouteTemplate()">⬇ Download CSV template</button>
+    </div>
+  </div>
+  <div class="btn-group">
+    <button class="btn" onclick="go('communities')">← Back</button>
+    <button class="btn btn-primary" onclick="go('optimize')">Continue →</button>
+  </div>
+</div>
+
+<!-- ── 4. OPTIMIZE ── -->
+<div class="panel" id="panel-optimize">
+  <div class="ph">
+    <div class="ph-eyebrow">Step 5 of 9</div>
+    <div class="ph-title">Route optimizer</div>
+    <div class="ph-desc">Configure parameters, run the optimizer, then adjust routes interactively. Rename routes, add or remove stops, delete entire routes, and re-run at any time.</div>
+  </div>
+  <div class="card">
+    <div class="card-title">Routing parameters</div>
+    <div class="alert alert-info" style="margin-bottom:14px"><span class="alert-icon">ℹ</span>
+      Stop locations are placed at the geographic center of each family cluster. For best results, upload your Critical Communities list (Step 3) — those named public locations (Boys &amp; Girls Clubs, libraries, apartment complexes) become the actual stop addresses instead of raw family addresses.
+    </div>
+    <div class="card-grid-3">
+      <div class="fg"><label>Number of routes</label><input id="opt-routes" type="number" value="4" min="1" max="8"></div>
+      <div class="fg"><label>Max walk distance (miles)</label><input id="opt-walk" type="number" value="0.25" step="0.05" min="0.1"></div>
+      <div class="fg"><label>Max stops per route</label><input id="opt-stops" type="number" value="8" min="2" max="20"></div>
+    </div>
+    <div class="card-grid">
+      <div class="fg">
+        <label>Max route radius from school (miles) <span style="font-size:10px;color:var(--text3)">— leave 0 for no limit</span></label>
+        <input id="opt-max-radius" type="number" value="0" step="0.5" min="0">
+        <div style="font-size:11px;color:var(--text3);margin-top:4px">Families beyond this radius are excluded. Rule of thumb: at 12 mph avg speed, <strong>10 miles ≈ 50 min ride</strong>, <strong>14 miles ≈ 70 min ride</strong>, <strong>18 miles ≈ 90 min ride</strong>. Reducing this is the fastest way to bring ride times under 60–90 min.</div>
+      </div>
+      <div class="fg">
+        <label style="color:var(--text2)">💡 Tips for shorter ride times</label>
+        <div style="font-size:12px;color:var(--text2);line-height:1.7;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px">
+          <strong>Add more routes</strong> — splitting families across more routes reduces each route's distance.<br>
+          <strong>Reduce max stops</strong> — fewer stops = less dwell time (3 min/stop).<br>
+          <strong>Set a radius limit</strong> — excludes addresses too far from school to serve within the time window.<br>
+          <strong>Check boundaries</strong> (Step 1) — use N/S/E/W limits to cut outlier addresses.
+        </div>
+      </div>
+    </div>
+    <div class="card-grid-3" style="margin-top:12px">
+      <div class="fg">
+        <label>Bus capacity (max riders/route)</label>
+        <input id="opt-capacity" type="number" value="70" min="10" max="120">
+        <div style="font-size:11px;color:var(--text3);margin-top:3px">Routes won't exceed this many riders.</div>
+      </div>
+      <div class="fg">
+        <label>Clustering method</label>
+        <select id="opt-cluster-method">
+          <option value="sector">Geographic sectors (N/S/E/W) — recommended</option>
+          <option value="kmeans">Standard k-means (distance only)</option>
+        </select>
+        <div style="font-size:11px;color:var(--text3);margin-top:3px">Sector mode prevents routes from overlapping regions.</div>
+      </div>
+      <div class="fg">
+        <label>Avg bus speed (mph)</label>
+        <input id="opt-speed" type="number" value="18" min="8" max="40">
+        <div style="font-size:11px;color:var(--text3);margin-top:3px">Used to estimate ride times. Urban: 15–18 mph. Suburban: 20–25 mph.</div>
+      </div>
+    </div>
+    <div class="btn-group" style="margin-top:12px">
+      <button class="btn btn-primary" onclick="runOptimizer()">Run optimizer</button>
+      <span id="opt-status" style="font-size:12px;color:var(--text3)"></span>
+    </div>
+  </div>
+  <div id="opt-results" style="display:none">
+    <div class="alert alert-warn" id="time-warning-banner" style="display:none;margin-bottom:12px"></div>
+    <div class="metrics" id="opt-metrics"></div>
+    <div class="card">
+      <div class="card-title">Route editor — select a route to edit its stops</div>
+      <div class="route-tabs" id="editor-tabs"></div>
+      <div id="editor-body"></div>
+    </div>
+    <div class="card" id="changes-card" style="display:none">
+      <div class="card-title">Changes vs. current routes</div>
+      <div id="changes-body"></div>
+    </div>
+    <div class="btn-group">
+      <button class="btn btn-primary" onclick="go('map')">View on map →</button>
+      <button class="btn" onclick="runOptimizer()">Re-run optimizer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── 5. MAP ── -->
+<div class="panel" id="panel-map">
+  <div class="ph">
+    <div class="ph-eyebrow">Step 6 of 9</div>
+    <div class="ph-title">Route map</div>
+    <div class="ph-desc">Drag any stop marker to reposition it. Click a marker for details. Changes save automatically and update the route editor.</div>
+  </div>
+  <div class="route-tabs" id="map-tabs"></div>
+  <div id="map"></div>
+  <div class="map-legend" id="map-legend"></div>
+  <div class="btn-group">
+    <button class="btn" onclick="go('optimize')">← Back to editor</button>
+    <button class="btn btn-primary" onclick="go('maps-out')">Generate Maps links →</button>
+  </div>
+</div>
+
+<!-- ── 6. GOOGLE MAPS LINKS ── -->
+<div class="panel" id="panel-maps-out">
+  <div class="ph">
+    <div class="ph-eyebrow">Step 7 of 9</div>
+    <div class="ph-title">Google Maps links</div>
+    <div class="ph-desc">One driving-directions link per route with estimated stop times. Share directly with your driver or vendor.</div>
+  </div>
+  <div id="maps-out-body"></div>
+  <div class="btn-group">
+    <button class="btn btn-primary" onclick="go('family')">Generate family bus list →</button>
+    <button class="btn" onclick="go('optimize')">← Back to editor</button>
+  </div>
+</div>
+
+<!-- ── 7. FAMILY BUS LIST ── -->
+<div class="panel" id="panel-family">
+  <div class="ph">
+    <div class="ph-eyebrow">Step 8 of 9</div>
+    <div class="ph-title">Family bus list</div>
+    <div class="ph-desc">A formatted family bus schedule matching your school's existing layout. Download as a Word document (.docx) — opens directly in Google Docs — or print to PDF.</div>
+  </div>
+  <div id="family-intro-card" class="card">
+    <div class="card-title">Customize document</div>
+    <div class="card-grid">
+      <div class="fg"><label>Organization tagline</label><input id="fl-tagline" type="text" placeholder="e.g. Preparing the next generation of equity driven, innovative leaders" value="Preparing the next generation of equity driven, innovative leaders"></div>
+      <div class="fg"><label>Contact name &amp; email for questions</label><input id="fl-contact" type="text" placeholder="e.g. Liz Goodmanson, egoodmanson@impactps.org"></div>
+    </div>
+    <div class="card-grid-3" style="margin-bottom:12px">
+      <div class="fg"><label>AM column header</label><input id="fl-am-label" type="text" value="Pick up Time" placeholder="Pick up Time"></div>
+      <div class="fg"><label>M–Th PM column header</label><input id="fl-mth-label" type="text" value="Drop off (M–Th)" placeholder="Drop off (M–Th)"></div>
+      <div class="fg"><label>Friday PM column header</label><input id="fl-friday-label" type="text" value="Drop off (Fri)" placeholder="Drop off (Fri)"></div>
+    </div>
+    <div class="fg"><label>Family expectations (optional — leave blank to omit)</label>
+      <textarea id="fl-expectations" rows="4" placeholder="e.g. All families are asked to be at the stop 3–5 minutes prior to pickup time to ensure buses run on time…"></textarea>
+    </div>
+    <div class="btn-group" style="margin-top:0">
+      <button class="btn btn-primary" onclick="renderFamilyList()">Preview bus list</button>
+      <button class="btn btn-teal" id="btn-dl-family-docx" onclick="downloadFamilyDocx()" style="display:none">⬇ Download as .docx (opens in Google Docs)</button>
+      <button class="btn btn-ghost btn-sm" onclick="window.print()">🖨 Print / PDF</button>
+    </div>
+  </div>
+  <div id="family-preview"></div>
+</div>
+
+<!-- ── 8. CFO REPORT ── -->
+<div class="panel" id="panel-cfo">
+  <div class="ph">
+    <div class="ph-eyebrow">Step 9 of 9</div>
+    <div class="ph-title">CFO cost report</div>
+    <div class="ph-desc">Full cost breakdown for your finance team. Download as a Word document (.docx) — opens directly in Google Docs when uploaded to Drive.</div>
+  </div>
+  <div id="cfo-preview-card" class="card" style="display:none">
+    <div class="card-title">Report preview</div>
+    <div class="cfo-report" id="cfo-text"></div>
+  </div>
+  <div class="btn-group" id="cfo-btns">
+    <button class="btn btn-primary" onclick="generateCFO()">Generate report</button>
+    <button class="btn btn-teal" id="btn-dl-docx" onclick="downloadDocx()" style="display:none">⬇ Download as .docx (opens in Google Docs)</button>
+    <button class="btn btn-ghost" onclick="window.print()">🖨 Print</button>
+    <button class="btn btn-ghost btn-sm" id="btn-dl-txt" onclick="downloadTxt()" style="display:none">⬇ .txt</button>
+  </div>
+</div>
+
+</main>
+</div>
+
+<!-- External libs: loaded dynamically so a CDN failure never blocks the app -->
+<script>
+(function(){
+  function loadScript(url, onload, onerror) {
+    var s = document.createElement('script');
+    s.src = url; s.async = true;
+    s.onload = onload || function(){};
+    s.onerror = onerror || function(){ console.warn('Could not load:', url); };
+    document.head.appendChild(s);
+  }
+  // Leaflet
+  loadScript('https://unpkg.com/leaflet@1.9.4/dist/leaflet.js');
+  // PDF.js — set worker path after load
+  loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js', function(){
+    if(typeof pdfjsLib !== 'undefined')
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  });
+  // Mammoth
+  loadScript('https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js');
+})();
+</script>
+<script>
+// PDF.js worker set in async loader above
+
+// ══════════════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════════════
+const STORAGE_KEY = 'bus_optimizer_session_v4';
+const S = {
+  school:{name:'',year:'',address:'',arrivalTime:'7:55 AM',director:'',email:''},
+  vendor:{name:'',rateType:'FLAT',dailyRate:800,mileageRate:0,hourlyRate:0,daysPerYear:180,minDays:180,overageRate:0,setupFee:0},
+  families:[],
+  communities:[],   // [{name, address, routePriority, type, lat, lon}]
+  currentRoutes:[],
+  routes:[],
+  activeRoute:0,
+};
+let leafletMap = null, mapLayers = [];
+let _cfoText = '';
+const ROUTE_COLORS = ['#2563eb','#0d9488','#d97706','#dc2626','#7c3aed','#0891b2','#65a30d','#db2777'];
+
+// ══════════════════════════════════════════════════════════════
+// PERSISTENCE
+// ══════════════════════════════════════════════════════════════
+function saveSession() {
+  try {
+    const snap = {school:S.school,vendor:S.vendor,families:S.families,communities:S.communities,currentRoutes:S.currentRoutes,routes:S.routes,activeRoute:S.activeRoute,savedAt:new Date().toISOString()};
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(snap));
+    const ind = document.getElementById('sb-save-indicator');
+    if(ind){ind.style.display='block';ind.classList.add('active');ind.textContent='⬤ Saved '+new Date().toLocaleTimeString();}
+  } catch(e){}
+}
+function loadSession() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+    const snap = JSON.parse(raw);
+    Object.assign(S.school, snap.school||{});
+    Object.assign(S.vendor, snap.vendor||{});
+    S.families = snap.families||[];
+    S.communities = snap.communities||[];
+    S.currentRoutes = snap.currentRoutes||[];
+    S.routes = snap.routes||[];
+    S.activeRoute = snap.activeRoute||0;
+    return snap;
+  } catch(e){ return false; }
+}
+function exportSession() {
+  saveSession();
+  const raw = localStorage.getItem(STORAGE_KEY)||'{}';
+  const a = document.createElement('a');
+  a.href = 'data:application/json;charset=utf-8,'+encodeURIComponent(raw);
+  a.download = `bus_session_${(S.school.name||'school').replace(/[^a-z0-9]/gi,'_')}.json`;
+  a.click();
+}
+function importSession(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const snap = JSON.parse(ev.target.result);
+      Object.assign(S.school, snap.school||{});
+      Object.assign(S.vendor, snap.vendor||{});
+      S.families = snap.families||[];
+      S.currentRoutes = snap.currentRoutes||[];
+      S.routes = snap.routes||[];
+      S.activeRoute = snap.activeRoute||0;
+      localStorage.setItem(STORAGE_KEY, ev.target.result);
+      restoreFormValues();
+      unlockFromState();
+      updateSidebar();
+      toast('Session restored successfully.','success');
+    } catch(err){ toast('Could not read that session file — make sure it is a valid .json export.','warn'); }
+  };
+  reader.readAsText(file);
+}
+function clearSession() {
+  if (!window._clearConfirmed) {
+    window._clearConfirmed = true;
+    toast('Click "Clear all & start over" again to confirm — this cannot be undone.','warn', 4000);
+    setTimeout(()=>{ window._clearConfirmed = false; }, 4500);
+    return;
+  }
+  window._clearConfirmed = false;
+  try { localStorage.removeItem(STORAGE_KEY); } catch(e){}
+  location.reload();
+}
+
+function restoreFormValues() {
+  const sc = S.school, v = S.vendor;
+  const set = (id,val) => { const el=document.getElementById(id); if(el&&val!==undefined&&val!==null) el.value=val; };
+  set('s-name',sc.name); set('s-year',sc.year); set('s-addr',sc.address);
+  set('s-arrival',sc.arrivalTime); set('s-dir',sc.director); set('s-email',sc.email);
+  set('v-name',v.name); set('v-rate-type',v.rateType); set('v-daily',v.dailyRate);
+  set('v-mileage',v.mileageRate); set('v-hourly',v.hourlyRate); set('v-days',v.daysPerYear);
+  set('v-min-days',v.minDays); set('v-overage',v.overageRate); set('v-setup-fee',v.setupFee);
+  toggleRateFields();
+}
+
+function unlockFromState() {
+  if (S.school.name) { unlock('upload'); unlock('communities'); unlock('routes-upload'); }
+  if (S.families.length) { unlock('optimize'); unlock('routes-upload'); document.getElementById('btn-upload-next').disabled=false; }
+  if (S.routes.length) { unlock('map'); unlock('maps-out'); unlock('family'); unlock('cfo'); }
+}
+
+
+// ── TOAST NOTIFICATION SYSTEM ──────────────────────────────
+function toast(msg, type='info', duration=3500) {
+  const container = document.getElementById('toast-container');
+  const el = document.createElement('div');
+  el.className = 'toast toast-' + type;
+  el.textContent = msg;
+  container.appendChild(el);
+  requestAnimationFrame(() => { el.classList.add('show'); });
+  setTimeout(() => {
+    el.classList.remove('show');
+    setTimeout(() => el.remove(), 250);
+  }, duration);
+}
+
+// ── INLINE ADD-STOP FORM (replaces prompt()) ──────────────
+function showAddStopForm(ri) {
+  let form = document.getElementById('add-stop-form');
+  if (!form) {
+    form = document.createElement('div');
+    form.id = 'add-stop-form';
+    form.innerHTML = [
+      '<div class="fg"><label>Stop address</label>',
+      '<input id="asp-addr" type="text" placeholder="e.g. 9800 8th Ave SW, Seattle, WA"></div>',
+      '<div class="fg"><label>Stop name</label>',
+      '<input id="asp-name" type="text" placeholder="e.g. Southwest Boys & Girls Club"></div>',
+      '<div class="btn-group" style="margin-top:8px">',
+      '<button class="btn btn-primary btn-sm" onclick="confirmAddStop()">Add stop</button>',
+      '<button class="btn btn-ghost btn-sm" onclick="hideAddStopForm()">Cancel</button>',
+      '</div>'
+    ].join('');
+    document.getElementById('editor-body').appendChild(form);
+  }
+  form.style.display = 'block';
+  form.dataset.ri = ri;
+  document.getElementById('asp-addr').focus();
+}
+function hideAddStopForm() {
+  var f = document.getElementById('add-stop-form');
+  if (f) f.style.display = 'none';
+}
+function confirmAddStop() {
+  const form = document.getElementById('add-stop-form');
+  const ri = parseInt(form.dataset.ri);
+  const addr = document.getElementById('asp-addr').value.trim();
+  const name = document.getElementById('asp-name').value.trim() || (addr.split(',')[0]);
+  if (!addr) { toast('Please enter an address.', 'warn'); return; }
+  const geo = roughGeocode(addr);
+  S.routes[ri].stops.push({id:'s'+Date.now(), name, address:addr, lat:geo.lat, lon:geo.lon, riders:[]});
+  form.style.display = 'none';
+  saveSession(); renderEditor();
+  toast('Stop added: ' + name, 'success');
+}
+
+// ══════════════════════════════════════════════════════════════
+// NAVIGATION
+// ══════════════════════════════════════════════════════════════
+function go(id) {
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.sb-item').forEach(n=>n.classList.remove('active'));
+  const panel=document.getElementById('panel-'+id);
+  const nav=document.getElementById('nav-'+id);
+  if(!panel) return;
+  if(nav&&nav.classList.contains('locked')) return;
+  panel.classList.add('active');
+  if(nav) nav.classList.add('active');
+  window.scrollTo(0,0);
+  if(id==='map') renderMap();
+  if(id==='maps-out') renderMapsOut();
+  if(id==='family') { /* wait for button */ }
+  if(id==='communities') renderCommunitiesList();
+}
+function unlock(id){const el=document.getElementById('nav-'+id);if(el)el.classList.remove('locked');}
+function updateSidebar(){
+  const bl=document.getElementById('sb-school-block');
+  if(S.school.name){
+    bl.style.display='block';
+    document.getElementById('sb-school-name').textContent=S.school.name;
+    document.getElementById('sb-status-line').textContent=S.routes.length?S.routes.length+' routes · '+S.families.length+' families':S.families.length+' families loaded';
+    document.getElementById('sb-save-indicator').style.display='block';
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// STEP 1: SETUP
+// ══════════════════════════════════════════════════════════════
+function toggleRateFields(){
+  const rt=document.getElementById('v-rate-type').value;
+  document.getElementById('vf-daily').style.display=(rt==='FLAT'||rt==='HYBRID')?'':'none';
+  document.getElementById('vf-mileage').style.display=(rt==='MILEAGE'||rt==='HYBRID')?'':'none';
+  document.getElementById('vf-hourly').style.display=(rt==='HOURLY')?'':'none';
+}
+function updateRideDisplay(){
+  const rm = parseInt(document.getElementById('v-ride-max').value)||90;
+  const dh = parseInt(document.getElementById('v-deadhead-max').value)||30;
+  const rmEl = document.getElementById('ride-max-display');
+  const tmEl = document.getElementById('total-max-display');
+  if(rmEl) rmEl.textContent = rm;
+  if(tmEl) tmEl.textContent = dh + rm + dh;
+}
+function saveSetup(){
+  const name = document.getElementById('s-name').value.trim();
+  if(!name){ toast('Please enter a school name before continuing.','warn'); return; }
+  S.school = {
+    name,
+    year:        document.getElementById('s-year').value.trim(),
+    address:     document.getElementById('s-addr').value.trim(),
+    arrivalTime: document.getElementById('s-arrival').value.trim() || '7:55 AM',
+    director:    document.getElementById('s-dir').value.trim(),
+    email:       document.getElementById('s-email').value.trim()
+  };
+  S.vendor = {
+    name:        document.getElementById('v-name').value.trim(),
+    rateType:    document.getElementById('v-rate-type').value,
+    dailyRate:   parseFloat(document.getElementById('v-daily').value)   || 0,
+    mileageRate: parseFloat(document.getElementById('v-mileage').value) || 0,
+    hourlyRate:  parseFloat(document.getElementById('v-hourly').value)  || 0,
+    daysPerYear: parseInt(document.getElementById('v-days').value)      || 180,
+    minDays:     parseInt(document.getElementById('v-min-days').value)  || 180,
+    overageRate: parseFloat(document.getElementById('v-overage').value) || 0,
+    setupFee:    parseFloat(document.getElementById('v-setup-fee').value) || 0,
+    yardAddress: document.getElementById('v-yard-addr').value.trim(),
+    deadheadMax: parseInt(document.getElementById('v-deadhead-max').value) || 30,
+    rideMax:     parseInt(document.getElementById('v-ride-max').value)     || 90,
+    rideTarget:  parseInt(document.getElementById('v-ride-target').value)  || 60,
+    boundaryNorth: document.getElementById('b-north').value.trim(),
+    boundarySouth: document.getElementById('b-south').value.trim(),
+    boundaryEast:  document.getElementById('b-east').value.trim(),
+    boundaryWest:  document.getElementById('b-west').value.trim(),
+  };
+  unlock('upload');
+  unlock('communities');
+  unlock('routes-upload');
+  updateSidebar();
+  saveSession();
+  go('upload');
+}
+
+// ══════════════════════════════════════════════════════════════
+// FILE HANDLING — CSV / PDF / DOCX / URL
+// ══════════════════════════════════════════════════════════════
+function dzOver(e,id){e.preventDefault();document.getElementById(id).classList.add('drag')}
+function dzLeave(id){document.getElementById(id).classList.remove('drag')}
+function dzDrop(e,type){e.preventDefault();dzLeave('uz-'+type);const f=e.dataTransfer.files[0];if(f)handleFileUpload({target:{files:[f]}},type)}
+function handleFileUpload(e,type){
+  const file=e.target.files[0];if(!file)return;
+  const ext=file.name.split('.').pop().toLowerCase();
+  if(ext==='pdf') loadPDF(file,type);
+  else if(ext==='docx'||ext==='doc') loadDocx(file,type);
+  else loadCSV(file,type);
+}
+async function loadPDF(file,type){
+  showStatus(type,'<span class="spinner"></span>Reading PDF…');
+  try{
+    const buf=await file.arrayBuffer();
+    const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+    let text='';
+    for(let i=1;i<=pdf.numPages;i++){
+      const page=await pdf.getPage(i);
+      const content=await page.getTextContent();
+      text+=content.items.map(it=>it.str).join(' ')+'\n';
+    }
+    processTextContent(text,type,file.name);
+  }catch(err){var _pid=type==='routes'?'routes-preview':type+'-preview';showAlert(_pid,'Could not read PDF: '+err.message,'danger');}
+}
+async function loadDocx(file,type){
+  showStatus(type,'<span class="spinner"></span>Reading document…');
+  try{
+    const buf=await file.arrayBuffer();
+    const result=await mammoth.extractRawText({arrayBuffer:buf});
+    processTextContent(result.value,type,file.name);
+  }catch(err){var _pid2=type==='routes'?'routes-preview':type+'-preview';showAlert(_pid2,'Could not read document: '+err.message,'danger');}
+}
+function loadCSV(file,type){
+  showStatus(type,'<span class="spinner"></span>Reading CSV…');
+  const reader=new FileReader();
+  reader.onload=e=>processTextContent(e.target.result,type,file.name);
+  reader.readAsText(file);
+}
+async function loadFromUrl(type){
+  const urlEl = document.getElementById('url-'+type);
+  const url = urlEl.value.trim();
+  if(!url){ toast('Please paste a URL first.','warn'); return; }
+
+  const previewId = type==='routes' ? 'routes-preview' : type+'-preview';
+  showStatus(type, '<span class="spinner"></span>Reading document...');
+
+  // Build all export URLs to try for this Google Doc/Sheet
+  const exportUrls = [];
+  if(url.includes('docs.google.com/document')){
+    const base = (url.match(/(https:\/\/docs\.google\.com\/document\/d\/[^\/]+)/) || [,''])[1]
+                 || url.split('/edit')[0].split('/pub')[0];
+    exportUrls.push(base + '/export?format=txt');
+    exportUrls.push(base + '/export?format=html');
+  } else if(url.includes('docs.google.com/spreadsheets')){
+    const base = (url.match(/(https:\/\/docs\.google\.com\/spreadsheets\/d\/[^\/]+)/) || [,''])[1]
+                 || url.split('/edit')[0].split('/pub')[0];
+    const gid = (url.match(/[#&?]gid=(\d+)/) || [,null])[1];
+    if(gid) exportUrls.push(base + '/export?format=csv&gid=' + gid);
+    exportUrls.push(base + '/export?format=csv');
+    exportUrls.push(base + '/gviz/tq?tqx=out:csv');
+  } else {
+    exportUrls.push(url);
+  }
+
+  // CORS proxy wrappers — tried in sequence until one works
+  const proxies = [
+    function(u){ return 'https://corsproxy.io/?' + encodeURIComponent(u); },
+    function(u){ return 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u); },
+    function(u){ return 'https://thingproxy.freeboard.io/fetch/' + u; },
+    function(u){ return u; } // direct last (usually blocked, but worth trying)
+  ];
+
+  for(var ei=0; ei<exportUrls.length; ei++){
+    for(var pi=0; pi<proxies.length; pi++){
+      try{
+        var fetchUrl = proxies[pi](exportUrls[ei]);
+        var res = await fetch(fetchUrl, {redirect:'follow', signal: AbortSignal.timeout(8000)});
+        if(!res.ok) continue;
+        var text = await res.text();
+        if(!text || text.trim().length < 20) continue;
+        // Skip HTML login/error pages returned instead of content
+        var t = text.trimStart();
+        if(t.startsWith('<!DOCTYPE') || t.startsWith('<html') || t.startsWith('<HTML')) continue;
+        // Skip JSON error envelopes from proxies
+        if(t.startsWith('{"') && t.includes('"error"')) continue;
+        processTextContent(text, type, 'Google Doc');
+        return;
+      } catch(e){ /* try next combination */ }
+    }
+  }
+
+  // Everything failed — show clear instructions
+  var _routesFallback = type === 'routes'
+    ? '<strong>Could not load via link.</strong> The easiest fix: use the file uploader above instead.'
+      + '<ol style="margin:10px 0 4px 16px;line-height:2.1">'
+      + '<li>In Google Docs: <strong>File &rarr; Download &rarr; Microsoft Word (.docx)</strong> — then drag that file onto the upload zone above.</li>'
+      + '<li>Or: <strong>File &rarr; Download &rarr; PDF</strong> — then drag the PDF onto the upload zone above.</li>'
+      + '<li>Or: <strong>File &rarr; Download &rarr; CSV</strong> (for Sheets) — then drag the CSV onto the upload zone.</li>'
+      + '</ol>'
+    : '<strong>Could not load via link.</strong> Try the file uploader instead:'
+      + '<ol style="margin:10px 0 4px 16px;line-height:2.1">'
+      + '<li>In Google Docs: <strong>File &rarr; Download &rarr; Microsoft Word (.docx)</strong> — then drag that file onto the upload zone above.</li>'
+      + '<li>Or: <strong>File &rarr; Download &rarr; PDF</strong> — then drag the PDF onto the upload zone above.</li>'
+      + '<li>Or for Sheets: <strong>File &rarr; Download &rarr; CSV</strong> — then drag the CSV file onto the upload zone.</li>'
+      + '</ol>';
+  showAlert(previewId, _routesFallback, 'warn');
+}
+function showStatus(type,html){
+  const id=type==='routes'?'routes-preview':type+'-preview';
+  const el=document.getElementById(id);
+  if(el)el.innerHTML=`<div style="font-size:13px;color:var(--text3);padding:8px 0">${html}</div>`;
+}
+
+// ── TEXT → ADDRESSES or ROUTES ────────────────────────────────
+function processTextContent(text,type,filename){
+  if(type==='routes'){
+    parseRoutesFromText(text,filename);
+  } else if(type==='communities'){
+    parseCommunitiesFromText(text,filename);
+  } else {
+    parseAddressesFromText(text,type,filename);
+  }
+}
+
+function parseAddressesFromText(text,type,filename){
+  // Try CSV first
+  const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);
+  const isCSV=lines[0]&&lines[0].includes(',');
+  let parsed=[];
+  if(isCSV){
+    const rows=lines.map(l=>splitCSVLine(l));
+    const headers=rows[0].map(h=>h.toLowerCase().trim());
+    const addrIdx=findColIdx(headers,['address','addr','home','street','location']);
+    const firstIdx=findColIdx(headers,['first name','firstname','first']);
+    const lastIdx=findColIdx(headers,['last name','lastname','last']);
+    const nameIdx=findColIdx(headers,['name','student','scholar','child']);
+    const gradeIdx=findColIdx(headers,['grade']);
+    for(let i=1;i<rows.length;i++){
+      const row=rows[i];
+      let addr=addrIdx>=0?row[addrIdx]:'';
+      if(!addr&&addrIdx<0) addr=findAddressInRow(row);
+      if(!addr||addr.length<5)continue;
+      addr=cleanAddr(addr);
+      if(!addr||addr.length<6)continue;
+      let name='';
+      if(firstIdx>=0&&lastIdx>=0) name=(row[firstIdx]||'')+' '+(row[lastIdx]||'');
+      else if(nameIdx>=0) name=row[nameIdx]||'';
+      const grade=gradeIdx>=0?row[gradeIdx]||'':'';
+      const geo=roughGeocode(addr);
+      parsed.push({id:rndId(),name:name.trim(),address:addr,grade,lat:geo.lat,lon:geo.lon,type});
+    }
+  } else {
+    // Plain text / PDF: extract lines that look like addresses
+    lines.forEach(line=>{
+      if(isAddressLike(line)){
+        const addr=cleanAddr(line);
+        if(!addr||addr.length<6)continue;
+        const geo=roughGeocode(addr);
+        parsed.push({id:rndId(),name:'',address:addr,grade:'',lat:geo.lat,lon:geo.lon,type});
+      }
+    });
+  }
+  if(type==='new') S.families=S.families.filter(f=>f.type!=='new').concat(parsed);
+  else S.families=S.families.filter(f=>f.type!=='current').concat(parsed.map(p=>({...p,type:'current'})));
+  showUploadPreview(type,parsed,filename);
+  if(S.families.length>0){document.getElementById('btn-upload-next').disabled=false;unlock('optimize');updateSidebar();saveSession();}
+}
+
+function parseRoutesFromText(text,filename){
+  var lines=text.split('\n').map(function(l){return l.trim();}).filter(Boolean);
+  var routeMap={};
+  var currentRoute=null;
+  var stopCounter=0;
+  var lastNonAddrLine='';
+
+  // Try CSV/TSV first (most reliable from Google Sheets)
+  var rows=lines.map(function(l){return splitCSVLine(l);});
+  if(rows.length>1){
+    var headers=rows[0].map(function(h){return h.toLowerCase().trim();});
+    var rIdx=findColIdx(headers,['route','route name','bus route']);
+    var sIdx=findColIdx(headers,['stop name','name','stop','location','community']);
+    var aIdx=findColIdx(headers,['address','addr','street']);
+    if(rIdx>=0 && aIdx>=0){
+      for(var i=1;i<rows.length;i++){
+        var row=rows[i]; if(!row||row.every(function(c){return !c;})) continue;
+        var rName=(row[rIdx]||'').trim()||'Route 1';
+        var sName=sIdx>=0?(row[sIdx]||'').trim():'';
+        var addr=(row[aIdx]||'').trim();
+        if(!addr) continue;
+        if(!routeMap[rName]) routeMap[rName]=[];
+        var _ca1=cleanAddr(addr); if(_ca1&&_ca1.length>=6) routeMap[rName].push({name:sName||_ca1.split(',')[0], address:_ca1});
+      }
+    } else if(aIdx>=0){
+      // Address column only — single route
+      for(var i=1;i<rows.length;i++){
+        var row=rows[i]; if(!row||row.every(function(c){return !c;})) continue;
+        var addr=(row[aIdx]||'').trim(); if(!addr) continue;
+        var sName=sIdx>=0?(row[sIdx]||'').trim():'';
+        if(!routeMap['Route 1']) routeMap['Route 1']=[];
+        var _ca2=cleanAddr(addr); if(_ca2&&_ca2.length>=6) routeMap['Route 1'].push({name:sName||_ca2.split(',')[0], address:_ca2});
+      }
+    }
+  }
+
+  // Fallback: parse free-form text (Google Doc export)
+  if(!Object.keys(routeMap).length){
+    var routeHeaderRe=/^(route\s+[a-z0-9]+|[a-z]+\s+route\s*\d*|bus\s+\d+)/i;
+    lines.forEach(function(line){
+      var rMatch=line.match(routeHeaderRe);
+      if(rMatch && line.length<80){
+        currentRoute=line.replace(/\s+/g,' ').trim();
+        if(!routeMap[currentRoute]) routeMap[currentRoute]=[];
+        stopCounter=0; lastNonAddrLine=''; return;
+      }
+      if(!currentRoute && isAddressLike(line)){
+        currentRoute='Route 1';
+        if(!routeMap[currentRoute]) routeMap[currentRoute]=[];
+      }
+      if(currentRoute && isAddressLike(line)){
+        var addr=cleanAddr(line); stopCounter++;
+        if(!addr||addr.length<6){lastNonAddrLine="";return;}
+        var name=lastNonAddrLine&&lastNonAddrLine.length<80?lastNonAddrLine:('Stop '+stopCounter);
+        routeMap[currentRoute].push({name:name, address:addr});
+        lastNonAddrLine='';
+      } else { lastNonAddrLine=line; }
+    });
+  }
+
+  S.currentRoutes=Object.entries(routeMap).map(([name,stops])=>({name,stops}));
+  const total=S.currentRoutes.reduce((s,r)=>s+r.stops.length,0);
+  const previewEl=document.getElementById('routes-preview');
+  if(S.currentRoutes.length){
+    var uzR=document.getElementById('uz-routes'); if(uzR) uzR.classList.add('done');
+    previewEl.innerHTML=`<div class="alert alert-success"><span class="alert-icon">✓</span>Loaded <strong>${S.currentRoutes.length} routes</strong> with <strong>${total} stops</strong> from "${filename}". The optimizer will compare against these.</div>
+    <div class="tbl-wrap"><table><thead><tr><th>Route</th><th>Stops</th><th>First stop address</th></tr></thead><tbody>
+    ${S.currentRoutes.map(r=>`<tr><td style="font-weight:500">${r.name}</td><td>${r.stops.length}</td><td style="font-size:11px;color:var(--text3)">${r.stops[0]?.address||'—'}</td></tr>`).join('')}
+    </tbody></table></div>`;
+    saveSession();
+  } else {
+    previewEl.innerHTML=`<div class="alert alert-warn"><span class="alert-icon">⚠</span>Could not detect route structure. Try the CSV template format, or make sure your PDF has clear "Route A / Route B" headings.</div>`;
+  }
+}
+
+// ── HELPERS ───────────────────────────────────────────────────
+function rndId(){return Math.random().toString(36).slice(2);}
+function splitCSVLine(line){const result=[];let cur='',inQ=false;for(let c of line){if(c==='"'){inQ=!inQ;}else if(c===','&&!inQ){result.push(cur.trim());cur='';}else cur+=c;}result.push(cur.trim());return result;}
+function findColIdx(headers,keywords){for(let i=0;i<headers.length;i++)for(const k of keywords)if(headers[i].includes(k))return i;return -1;}
+function isAddressLike(s){
+  if(!s || s.length < 6 || s.length > 120) return false;
+  if(/[|\\]/.test(s)) return false;                          // reject pipe/backslash artifacts
+  if(/^\s*[\d|\s]+\s*$/.test(s)) return false;              // reject number-only or pipe-only strings
+  if(/^\s*\d{1,2}\s*[|,]\s*\d/.test(s)) return false;      // reject "3 | 3" or "5, 2" row patterns
+  if(!/\d+\s+\w/.test(s)) return false;                      // must start with a house number
+  if(/(ave|st|blvd|way|rd|dr|ln|pl|ct|pkwy|hwy|south|north|east|west|sw|se|ne|nw)/i.test(s)) return true;
+  return false;
+}
+function findAddressInRow(row){return row.find(c=>isAddressLike(c))||'';}
+function cleanAddr(addr){let a=addr.replace(/^[a-zA-Z]\s+/,'').replace(/\s+/g,' ').trim();if(/[|\\]/.test(a)||/^[\d\s,|]+$/.test(a))return '';if(!/seattle|federal way|auburn|kent|renton|burien|seatac|des moines|tukwila|wa\s*\d{5}/i.test(a)&&a.length<60)a+=', WA';return a;}
+
+function showUploadPreview(type,parsed,filename){
+  const id=type+'-preview';
+  const uzEl=document.getElementById('uz-'+type);
+  if(!parsed.length){showAlert(id,'No valid addresses found in "'+filename+'". Make sure your Google Doc has a clear address column or one address per line.','warn');return;}
+  if(uzEl) uzEl.classList.add('done');
+  const geocodedOk=parsed.filter(p=>p.lat!==47.606).length;
+  document.getElementById(id).innerHTML=`
+    <div class="alert alert-success" style="margin-bottom:10px"><span class="alert-icon">✓</span>
+      <strong>${parsed.length} addresses</strong> loaded from "${filename}". ${geocodedOk} geocoded to known locations.
+    </div>
+    <div class="tbl-wrap"><table><thead><tr><th>Name</th><th>Address</th><th>Grade</th><th>Geocoded</th></tr></thead>
+    <tbody>${parsed.slice(0,6).map(p=>`<tr>
+      <td>${p.name||'—'}</td><td style="font-size:11px">${p.address}</td><td>${p.grade||'—'}</td>
+      <td>${p.lat!==47.606?'<span class="badge badge-green">✓</span>':'<span class="badge badge-amber">est.</span>'}</td>
+    </tr>`).join('')}
+    ${parsed.length>6?`<tr><td colspan="4" style="color:var(--text3);text-align:center">… and ${parsed.length-6} more</td></tr>`:''}</tbody></table></div>`;
+}
+function showAlert(containerId,msg,type='info'){
+  const icons={info:'ℹ',success:'✓',warn:'⚠',danger:'✕'};
+  const el=document.getElementById(containerId);if(el)el.innerHTML=`<div class="alert alert-${type}"><span class="alert-icon">${icons[type]}</span>${msg}</div>`;
+}
+
+
+// ══════════════════════════════════════════════════════════════
+// CRITICAL COMMUNITIES
+// ══════════════════════════════════════════════════════════════
+const CC_TYPES = ['Apartment Complex','Boys & Girls Club','Library','Community Center',
+                  'Daycare','School','Grocery Store','Church','Other'];
+
+function parseCommunitiesFromText(text, filename) {
+  const lines = text.split('\n').map(l=>l.trim()).filter(Boolean);
+  const isCSV = lines[0] && lines[0].includes(',');
+  const parsed = [];
+
+  if (isCSV) {
+    const rows = lines.map(l=>splitCSVLine(l));
+    const headers = rows[0].map(h=>h.toLowerCase().trim());
+    const nameIdx   = findColIdx(headers, ['community','name','neighborhood','location','zone','site','place']);
+    const addrIdx   = findColIdx(headers, ['address','addr','street']);
+    const routeIdx  = findColIdx(headers, ['route','priority','assigned']);
+    const typeIdx   = findColIdx(headers, ['type','stop type','venue']);
+
+    for (let i=1; i<rows.length; i++) {
+      const row = rows[i];
+      if (!row || row.every(c=>!c)) continue;
+      const name = nameIdx>=0 ? row[nameIdx] : ('Community '+(parsed.length+1));
+      let addr   = addrIdx>=0 ? row[addrIdx] : findAddressInRow(row);
+      if (!addr && !name) continue;
+      addr = addr ? cleanAddr(addr) : '';
+      const route = routeIdx>=0 ? row[routeIdx] : '';
+      const type  = typeIdx>=0  ? row[typeIdx]  : inferType(name);
+      const geo   = addr ? roughGeocode(addr) : {lat:47.5,lon:-122.3,matched:false};
+      parsed.push({id:rndId(), name:name.trim(), address:addr, routePriority:route.trim(), type:type||'Other', lat:geo.lat, lon:geo.lon});
+    }
+  } else {
+    // Plain text fallback — only accept lines that look like real location names
+    // (contain a keyword associated with a venue type) or clear addresses.
+    // This prevents picking up headers, bullets, sentences, etc.
+    const locationKeywords = /apartment|apt|complex|housing|terrace|village|manor|court|boys.*girls|bgc|library|community center|rec center|daycare|child.*care|kindercare|preschool|elementary|middle school|high school|grocery|safeway|qfc|church|mosque|temple|synagogue|plaza|square|park|clinic|center|hub|club/i;
+    lines.forEach(line=>{
+      // Skip obvious non-location lines
+      if (line.length < 4 || line.length > 100) return;
+      if (/^(page|route|stop|#|\d+\.|•|-|–|note|source|updated|contact|phone|email|www|http)/i.test(line)) return;
+      if (/[.!?]$/.test(line) && line.length > 40) return; // skip sentences
+      if (/(and|the|for|with|that|this|from|have|will|are|was|our|we|to|of|in|at)/i.test(line) && line.split(' ').length > 5) return; // skip prose
+
+      if (isAddressLike(line)) {
+        const addr = cleanAddr(line);
+        if(!addr||addr.length<6)return;
+        const geo  = roughGeocode(addr);
+        parsed.push({id:rndId(), name:addr.split(',')[0], address:addr, routePriority:'', type:inferType(line), lat:geo.lat, lon:geo.lon});
+      } else if (locationKeywords.test(line) && line.length > 4 && line.length < 80) {
+        // Recognisable venue type — accept as name-only entry
+        parsed.push({id:rndId(), name:line.trim(), address:'', routePriority:'', type:inferType(line), lat:47.5, lon:-122.3});
+      }
+      // Lines that don't match either pattern are silently skipped
+    });
+  }
+
+  if (!parsed.length) {
+    showAlert('communities-preview','No communities found. Try the CSV template — it needs at minimum a Name column and/or Address column.','warn');
+    return;
+  }
+
+  S.communities = S.communities.concat(parsed);
+  renderCommunitiesList();
+  saveSession();
+
+  const uzComm = document.getElementById('uz-communities');
+  if(uzComm) uzComm.classList.add('done');
+  document.getElementById('communities-preview').innerHTML =
+    '<div class="alert alert-success"><span class="alert-icon">\u2713</span><strong>'+parsed.length+' communities</strong> loaded from "'+filename+'". Review and edit below.</div>';
+}
+
+function inferType(name) {
+  const n = name.toLowerCase();
+  if (/apartment|apt|complex|housing|terrace|village|manor|court|place/i.test(n)) return 'Apartment Complex';
+  if (/boys.*girls|bgc/i.test(n)) return 'Boys & Girls Club';
+  if (/library|lib/i.test(n)) return 'Library';
+  if (/community center|rec center|recreation/i.test(n)) return 'Community Center';
+  if (/daycare|child.*care|kindercare|learning|academy|preschool/i.test(n)) return 'Daycare';
+  if (/school|elementary|middle|high school/i.test(n)) return 'School';
+  if (/grocery|market|safeway|qfc|kroger|albertsons/i.test(n)) return 'Grocery Store';
+  if (/church|mosque|temple|synagogue|faith/i.test(n)) return 'Church';
+  return 'Other';
+}
+
+function renderCommunitiesList() {
+  const card = document.getElementById('communities-list-card');
+  const tbody = document.getElementById('cc-tbody');
+  const countEl = document.getElementById('cc-count');
+  if (!card || !tbody) return;
+
+  if (!S.communities.length) { card.style.display='none'; return; }
+  card.style.display = '';
+  countEl.textContent = S.communities.length;
+
+  const routeOpts = ['Any'].concat(S.routes.length
+    ? S.routes.map(r=>r.name)
+    : ['Route 1','Route 2','Route 3','Route 4']);
+
+  tbody.innerHTML = S.communities.map((c,i) => {
+    const typeOpts = CC_TYPES.map(t=>'<option'+(c.type===t?' selected':'')+'>'+t+'</option>').join('');
+    const routeOptHtml = routeOpts.map(r=>'<option'+(c.routePriority===r?' selected':'')+'>'+r+'</option>').join('');
+    const addrNote = !c.address ? '<div style="font-size:10px;color:var(--amber);margin-top:2px">⚠ No address — will be included but not mapped until address is added</div>' : '';
+    return '<tr>'
+      +'<td><input style="width:100%;font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:4px" value="'+escHtml(c.name)+'" onchange="S.communities['+i+'].name=this.value;saveSession()"></td>'
+      +'<td><input style="width:100%;font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:4px" placeholder="Optional — add if known" value="'+escHtml(c.address)+'" onchange="S.communities['+i+'].address=this.value;S.communities['+i+'].lat=roughGeocode(this.value).lat;S.communities['+i+'].lon=roughGeocode(this.value).lon;saveSession();renderCommunitiesList()">'+addrNote+'</td>'
+      +'<td><select style="font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:4px" onchange="S.communities['+i+'].routePriority=this.value;saveSession()">'+routeOptHtml+'</select></td>'
+      +'<td><select style="font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:4px" onchange="S.communities['+i+'].type=this.value;saveSession()">'+typeOpts+'</select></td>'
+      +'<td><button class="btn btn-sm" style="padding:3px 8px;font-size:11px;color:var(--red);border-color:var(--red);background:var(--red-light)" onclick="removeCommunity('+i+')">✕ Remove</button></td>'
+      +'</tr>';
+  }).join('');
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function removeCommunity(i) {
+  S.communities.splice(i,1);
+  renderCommunitiesList();
+  saveSession();
+  toast('Community removed.','info');
+}
+
+function addCommunityRow() {
+  S.communities.push({id:rndId(), name:'', address:'', routePriority:'Any', type:'Other', lat:47.5, lon:-122.3});
+  renderCommunitiesList();
+  const card = document.getElementById('communities-list-card');
+  if (card) card.scrollIntoView({behavior:'smooth'});
+}
+
+function downloadCommunitiesTemplate() {
+  const csv = 'Community Name,Address,Route Priority,Type\n'
+    + 'Rainier Valley Apts,"2900 Rainier Ave S, Seattle, WA",Route 1,Apartment Complex\n'
+    + 'Delridge Boys & Girls Club,"6520 Delridge Way SW, Seattle, WA",Route 2,Boys & Girls Club\n'
+    + 'Beacon Hill Library,"2821 Beacon Ave S, Seattle, WA",Any,Library\n'
+    + 'Lake City Community Center,"12531 28th Ave NE, Seattle, WA",Route 3,Community Center\n';
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download = 'critical_communities_template.csv';
+  a.click();
+}
+
+
+// ══════════════════════════════════════════════════════════════
+// NOMINATIM GEOCODING (OpenStreetMap, free, no API key)
+// ══════════════════════════════════════════════════════════════
+const _geocodeCache = {};
+
+async function geocodeAddress(address) {
+  const key = address.toLowerCase().trim();
+  if (_geocodeCache[key]) return _geocodeCache[key];
+  try {
+    const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&q='
+      + encodeURIComponent(address);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 4000); // 4s max per request
+    const res = await fetch(url, {
+      headers: { 'Accept-Language': 'en-US', 'User-Agent': 'BusRouteOptimizer/1.0' },
+      signal: controller.signal
+    });
+    clearTimeout(timer);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (data && data.length > 0) {
+      const result = { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon), matched: true };
+      _geocodeCache[key] = result;
+      return result;
+    }
+  } catch(e) { /* timed out or failed — fall through to rough geocode */ }
+  const fallback = roughGeocode(address);
+  _geocodeCache[key] = fallback;
+  return fallback;
+}
+
+// Nominatim rate-limits to 1 req/sec. We batch with a small delay.
+async function geocodeAllFamilies() {
+  const toGeocode = S.families.filter(f => !f.geocodedByNominatim && f.address);
+  if (!toGeocode.length) return;
+
+  const statusEl = document.getElementById('geocode-status');
+  if (statusEl) statusEl.style.display = 'block';
+  let done = 0;
+
+  for (const f of toGeocode) {
+    const geo = await geocodeAddress(f.address);
+    f.lat = geo.lat;
+    f.lon = geo.lon;
+    f.geocodedByNominatim = true;
+    done++;
+    if (statusEl) {
+      statusEl.textContent = 'Geocoding addresses… ' + done + ' / ' + toGeocode.length;
+    }
+    // Nominatim rate limit: 1 request/sec
+    await new Promise(r => setTimeout(r, 1050));
+  }
+
+  // Also geocode communities
+  for (const c of S.communities) {
+    if (!c.geocodedByNominatim && c.address) {
+      const geo = await geocodeAddress(c.address);
+      c.lat = geo.lat; c.lon = geo.lon;
+      c.geocodedByNominatim = true;
+      await new Promise(r => setTimeout(r, 1050));
+    }
+  }
+
+  if (statusEl) statusEl.style.display = 'none';
+  saveSession();
+  toast('All addresses geocoded — map locations are now accurate.', 'success', 4000);
+}
+
+// ══════════════════════════════════════════════════════════════
+// GEOCODER
+// ══════════════════════════════════════════════════════════════
+const ANCHORS=[
+  [/campus view apartments|34104 1st pl/i,47.306,-122.312],
+  [/federal way community center|876 s 333/i,47.306,-122.328],
+  [/federal way kindercare|32324 1st ave/i,47.314,-122.312],
+  [/watermark apartments|31655 military/i,47.327,-122.300],
+  [/sw 306th|306th pl/i,47.316,-122.330],
+  [/brookside village|28705 34th/i,47.367,-122.219],
+  [/arterra apartments|10031 se 258/i,47.386,-122.164],
+  [/ages in stages|24812 36th/i,47.408,-122.235],
+  [/16th ave sw.*holden|holden.*16th/i,47.529,-122.371],
+  [/s.*101st.*11th|101st st.*11th/i,47.521,-122.329],
+  [/southwest boys.*girls|9800 8th ave sw/i,47.516,-122.363],
+  [/latitude 112|125 sw 112/i,47.508,-122.349],
+  [/raleigh.*apart|12415 ambaum/i,47.499,-122.346],
+  [/kids country burien|14400 ambaum/i,47.484,-122.347],
+  [/des moines elementary|23801 16th/i,47.404,-122.315],
+  [/madrona elementary|20301 32nd/i,47.432,-122.296],
+  [/windsor heights|17229 32nd/i,47.461,-122.296],
+  [/polaris.*seatac|15300 33rd/i,47.476,-122.296],
+  [/beacon ave.*5601|5601.*beacon/i,47.553,-122.308],
+  [/s henderson.*46th|henderson.*46th/i,47.538,-122.277],
+  [/122nd pl.*petrovitsky|12121 se petrov/i,47.454,-122.152],
+  [/tukwila community center|12424 42nd ave s/i,47.476,-122.258],
+  [/whisperwood|11846 26th ave s/i,47.488,-122.326],
+  [/dollar tree|12000 des moines/i,47.497,-122.327],
+  [/children.*academy.*burien|634 sw 149/i,47.465,-122.350],
+  [/heights.*vintage|21212 international/i,47.423,-122.297],
+  [/bow lake elementary|18237 42nd/i,47.452,-122.260],
+  [/shannon south|3508 s 180/i,47.459,-122.295],
+  [/sand point|7[0-9]00 sand point/i,47.682,-122.263],
+  [/lake city|lake city way ne/i,47.718,-122.289],
+  [/ne 125/i,47.720,-122.310],[/northgate|ne 145/i,47.706,-122.325],
+  [/university way|uw district/i,47.659,-122.313],
+  [/northlake|n northlake/i,47.653,-122.326],
+  [/ballard|24th ave nw/i,47.668,-122.384],
+  [/greenwood/i,47.690,-122.354],
+  [/dexter ave n/i,47.635,-122.341],
+  [/western ave|2[0-9][0-9][0-9] western/i,47.607,-122.343],
+  [/pike.*market|pike place/i,47.609,-122.342],
+  [/madison st|11[0-9][0-9] madison/i,47.609,-122.319],
+  [/arboretum|arboretum dr/i,47.636,-122.298],
+  [/yesler/i,47.601,-122.328],
+  [/s jackson/i,47.599,-122.315],
+  [/beacon ave s|28[0-9][0-9] beacon/i,47.571,-122.313],
+  [/rainier ave s|29[0-9][0-9] rainier/i,47.572,-122.288],
+  [/delridge|65[0-9][0-9] delridge/i,47.554,-122.360],
+  [/35th ave sw/i,47.554,-122.381],
+  [/california ave sw/i,47.562,-122.388],
+  [/fauntleroy/i,47.528,-122.394],
+  [/admiral way/i,47.580,-122.385],
+  [/federal way/i,47.322,-122.313],
+  [/auburn.*wa|auburn,/i,47.307,-122.229],
+  [/kent.*wa|kent,/i,47.381,-122.235],
+  [/renton.*wa|renton,/i,47.482,-122.217],
+  [/burien.*wa|burien,/i,47.471,-122.346],
+  [/seatac|sea-tac/i,47.444,-122.298],
+  [/des moines.*wa/i,47.402,-122.324],
+  [/tukwila/i,47.474,-122.262],
+  [/main street.*seattle|1111 main/i,47.606,-122.334],
+];
+function roughGeocode(addr){
+  const a=String(addr).toLowerCase();
+  for(const [pat,lat,lon] of ANCHORS) if(pat.test(a)) return{lat,lon,matched:true};
+  const numMatch=a.match(/^(\d+)/);
+  if(numMatch){const n=parseInt(numMatch[1]);
+    if(a.includes(' ne '))return{lat:47.61+n/10000,lon:-122.31,matched:false};
+    if(a.includes(' nw '))return{lat:47.64+n/12000,lon:-122.37,matched:false};
+    if(a.includes(' sw '))return{lat:47.57-n/18000,lon:-122.36,matched:false};
+    if(a.includes(' s ')||a.includes(' s,'))return{lat:47.60-n/14000,lon:-122.30,matched:false};
+  }
+  if(/federal way/i.test(a))return{lat:47.322,lon:-122.313,matched:false};
+  if(/auburn/i.test(a))return{lat:47.307,lon:-122.229,matched:false};
+  if(/kent/i.test(a))return{lat:47.381,lon:-122.235,matched:false};
+  if(/burien/i.test(a))return{lat:47.471,lon:-122.346,matched:false};
+  if(/seatac|sea-tac/i.test(a))return{lat:47.444,lon:-122.298,matched:false};
+  if(/renton/i.test(a))return{lat:47.482,lon:-122.217,matched:false};
+  return{lat:47.5,lon:-122.3,matched:false};
+}
+function haversine(a,b){
+  const R=3958.8,dLat=(b.lat-a.lat)*Math.PI/180,dLon=(b.lon-a.lon)*Math.PI/180;
+  const x=Math.sin(dLat/2)**2+Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+}
+
+// ══════════════════════════════════════════════════════════════
+// OPTIMIZER (k-means, same as v3 — unchanged)
+// ══════════════════════════════════════════════════════════════
+function runOptimizer(){
+  if(!S.families.length){toast('Please upload family addresses first (Step 2).','warn');return;}
+
+  var statusEl = document.getElementById('opt-status');
+  statusEl.innerHTML = '<span class="spinner"></span> Running optimizer…';
+
+  // Use setTimeout so the spinner renders before we do the heavy work
+  setTimeout(function(){
+    try {
+      function getVal(id, fallback, parser) {
+        var el = document.getElementById(id);
+        if (!el) return fallback;
+        var v = parser(el.value);
+        return isNaN(v) ? fallback : v;
+      }
+      var numRoutes   = getVal('opt-routes',    4,    parseInt);
+      var maxWalk     = getVal('opt-walk',       0.25, parseFloat);
+      var maxStops    = getVal('opt-stops',      8,    parseInt);
+      var maxRadius   = getVal('opt-max-radius', 0,    parseFloat);
+      var maxCapacity = getVal('opt-capacity',   70,   parseInt);
+      var clusterEl   = document.getElementById('opt-cluster-method');
+      var clusterMethod = (clusterEl && clusterEl.value) ? clusterEl.value : 'sector';
+
+      var schoolGeo = roughGeocode(S.school.address || 'Seattle WA');
+
+      // Filter families by radius (boundaries are handled at setup — skip live geocoding)
+      var fams = S.families.filter(function(f){
+        if(!f.lat || !f.lon) return false;
+        if(maxRadius > 0 && haversine(f, schoolGeo) > maxRadius) return false;
+        return true;
+      });
+
+      var excluded = S.families.length - fams.length;
+      if(excluded > 0) toast(excluded + ' address(es) excluded by radius limit.', 'warn', 4000);
+
+      if(!fams.length){
+        statusEl.textContent = 'No families to cluster — check your radius setting.';
+        return;
+      }
+
+      // Run clustering — always produces exactly numRoutes routes
+      S.routes = (clusterMethod === 'sector')
+        ? sectorRoutes(fams, numRoutes, maxStops, maxWalk)
+        : kmeansRoutes(fams, numRoutes, maxStops, maxWalk);
+
+      // Warn if any route exceeds bus capacity (capacity is informational only —
+      // you cannot fit more riders on fewer buses than the math allows)
+      if (maxCapacity > 0) {
+        var overCap = S.routes.filter(function(r) { return r.riders.length > maxCapacity; });
+        if (overCap.length) {
+          var minBusesNeeded = Math.ceil(fams.length / maxCapacity);
+          toast(
+            overCap.length + ' route(s) exceed ' + maxCapacity + ' riders. ' +
+            'With ' + fams.length + ' families and a ' + maxCapacity + '-rider cap, ' +
+            'you need at least ' + minBusesNeeded + ' buses. Try increasing "Number of routes" to ' + minBusesNeeded + '.',
+            'warn', 9000
+          );
+        }
+      }
+
+      // Anchor critical community stops
+      injectCommunityStops(maxWalk);
+
+      // Check ride times
+      checkRouteTimes();
+
+      // Render results
+      S.activeRoute = 0;
+      document.getElementById('opt-results').style.display = '';
+      renderMetrics();
+      renderEditor();
+      if(S.currentRoutes.length) renderChanges();
+      unlock('map'); unlock('maps-out'); unlock('family'); unlock('cfo');
+      updateSidebar();
+      saveSession();
+
+      statusEl.innerHTML = '<span style="color:var(--green);font-weight:600">✓ ' + S.routes.length + ' routes generated</span>';
+
+    } catch(err) {
+      console.error('Optimizer error:', err);
+      statusEl.innerHTML = '<span style="color:var(--red)">Error: ' + (err.message || String(err)) + '</span>';
+      toast('Optimizer failed — see status message above.', 'danger', 6000);
+    }
+  }, 80);
+}
+
+
+// ── GEOGRAPHIC BOUNDARY RESOLVER ─────────────────────────────
+async function resolveBoundaries() {
+  const v = S.vendor;
+  const result = { north:null, south:null, east:null, west:null };
+  // Skip entirely if no boundaries are configured — the common case
+  const anyBoundary = v.boundaryNorth || v.boundarySouth || v.boundaryEast || v.boundaryWest;
+  if (!anyBoundary) return result;
+  async function geocodeBoundary(text) {
+    if (!text || !text.trim()) return null;
+    try {
+      const geo = await geocodeAddress(text.trim());
+      return geo;
+    } catch(e) { return null; }
+  }
+  // Resolve all four with a hard 6s overall cap
+  const timeout = new Promise(resolve => setTimeout(() => resolve([null,null,null,null]), 6000));
+  const geocodes = Promise.all([
+    geocodeBoundary(v.boundaryNorth),
+    geocodeBoundary(v.boundarySouth),
+    geocodeBoundary(v.boundaryEast),
+    geocodeBoundary(v.boundaryWest),
+  ]);
+  const [n,s,e,w] = await Promise.race([geocodes, timeout]);
+  if(n) result.north = n.lat;
+  if(s) result.south = s.lat;
+  if(e) result.east  = e.lon;
+  if(w) result.west  = w.lon;
+  return result;
+}
+
+// ── ROUTE TIME VALIDATION ────────────────────────────────────
+function estimateRouteMinutes(r) {
+  // Estimate total scholar ride time: stops * dwell + driving
+  const schoolGeo = roughGeocode(S.school.address || 'Seattle WA');
+  let mi = 0;
+  const pts = [...r.stops, schoolGeo];
+  for (let i=0; i<pts.length-1; i++) mi += haversine(pts[i], pts[i+1]);
+  var _speedEl = document.getElementById('opt-speed');
+  const speed = (_speedEl && parseFloat(_speedEl.value)) || 18;
+  const driveMin = Math.round(mi / speed * 60);
+  const dwellMin = r.stops.length * 3;
+  return driveMin + dwellMin;
+}
+
+function checkRouteTimes() {
+  const rideMax    = S.vendor.rideMax    || 90;
+  const rideTarget = S.vendor.rideTarget || 60;
+  const deadhead   = S.vendor.deadheadMax|| 30;
+  let warnings = [];
+
+  S.routes.forEach(r => {
+    r.estimatedMins = estimateRouteMinutes(r);
+    r.timeStatus = r.estimatedMins <= rideTarget ? 'ok'
+                 : r.estimatedMins <= rideMax    ? 'warn'
+                 : 'over';
+    if (r.timeStatus === 'over') {
+      warnings.push(r.name + ': ~' + r.estimatedMins + ' min scholar ride time (max ' + rideMax + ' min)');
+    } else if (r.timeStatus === 'warn') {
+      warnings.push(r.name + ': ~' + r.estimatedMins + ' min (target ' + rideTarget + ' min, max ' + rideMax + ' min)');
+    }
+  });
+
+  if (warnings.length) {
+    const msg = warnings.length + ' route(s) exceed your time limits:\n' + warnings.join('\n')
+      + '\n\nReduce stops or split into more routes to bring times down.';
+    // Show as persistent warning in editor, not blocking toast
+    setTimeout(() => {
+      const warningEl = document.getElementById('time-warning-banner');
+      if (warningEl) {
+        warningEl.style.display = '';
+        warningEl.innerHTML = '<span class="alert-icon">⚠</span><div><strong>'
+          + warnings.length + ' route(s) over time limit.</strong><br>'
+          + warnings.map(w=>'<div style="font-size:12px;margin-top:3px">'+w+'</div>').join('')
+          + '</div>';
+      }
+    }, 100);
+  } else {
+    const warningEl = document.getElementById('time-warning-banner');
+    if (warningEl) warningEl.style.display = 'none';
+  }
+}
+
+// ── INJECT CRITICAL COMMUNITY ANCHOR STOPS ──────────────────
+function injectCommunityStops(maxWalk) {
+  if (!S.communities.length || !S.routes.length) return;
+  const schoolGeo = roughGeocode(S.school.address || 'Seattle WA');
+
+  S.communities.forEach(function(cc) {
+    if (!cc.address && cc.lat === 47.5) return; // no location info
+
+    // Determine which route to anchor to
+    let targetRoute = null;
+    if (cc.routePriority && cc.routePriority !== 'Any') {
+      targetRoute = S.routes.find(r => r.name === cc.routePriority);
+    }
+    if (!targetRoute) {
+      // Assign to geographically nearest route center
+      let best = S.routes[0], bd = Infinity;
+      S.routes.forEach(r => {
+        const cx = r.stops.reduce((s,st)=>s+st.lat,0)/Math.max(r.stops.length,1);
+        const cy = r.stops.reduce((s,st)=>s+st.lon,0)/Math.max(r.stops.length,1);
+        const d = haversine({lat:cc.lat,lon:cc.lon},{lat:cx,lon:cy});
+        if (d < bd) { bd = d; best = r; }
+      });
+      targetRoute = best;
+    }
+
+    // Check if there's already a stop within walking distance
+    const alreadyCovered = targetRoute.stops.some(s =>
+      haversine({lat:cc.lat,lon:cc.lon}, s) <= maxWalk
+    );
+    if (alreadyCovered) return;
+
+    // Insert as first stop (farthest-from-school logic: prepend if farther than current first)
+    const newStop = {
+      id: 'cc-' + cc.id,
+      name: cc.name || cc.address.split(',')[0],
+      address: cc.address,
+      lat: cc.lat, lon: cc.lon,
+      riders: [],
+      isCriticalCommunity: true,
+      ccType: cc.type,
+    };
+
+    // Insert in correct order (farthest from school first)
+    const distToSchool = haversine({lat:cc.lat,lon:cc.lon}, schoolGeo);
+    let inserted = false;
+    for (let i=0; i<targetRoute.stops.length; i++) {
+      const dStop = haversine(targetRoute.stops[i], schoolGeo);
+      if (distToSchool >= dStop) {
+        targetRoute.stops.splice(i, 0, newStop);
+        inserted = true;
+        break;
+      }
+    }
+    if (!inserted) targetRoute.stops.push(newStop);
+  });
+}
+
+// ── CLUSTERING ───────────────────────────────────────────────────────────────
+// Both methods always produce EXACTLY k routes.
+// Capacity is a warning threshold only — it cannot override the route count
+// (e.g. 2 buses with 576 families simply cannot all be under 70 riders each).
+
+// Sector clustering: divides families into k angular wedges from the school.
+function sectorRoutes(families, k, maxStops, maxWalk) {
+  if (!families.length) return [];
+  k = Math.min(k, families.length);
+  var school = roughGeocode(S.school.address || 'Seattle WA');
+
+  // Calculate bearing from school for every family
+  var withBearing = families.map(function(f) {
+    var dLat = f.lat - school.lat;
+    var dLon = (f.lon - school.lon) * Math.cos(school.lat * Math.PI / 180);
+    var bearing = (Math.atan2(dLon, dLat) * 180 / Math.PI + 360) % 360;
+    return { f: f, bearing: bearing };
+  });
+
+  // Sort by bearing, then split into k equal-sized slices by family count
+  // (not equal degrees) so each route gets roughly the same number of families
+  withBearing.sort(function(a, b) { return a.bearing - b.bearing; });
+  var sliceSize = Math.ceil(withBearing.length / k);
+  var routes = [];
+  for (var i = 0; i < k; i++) {
+    var slice = withBearing.slice(i * sliceSize, (i + 1) * sliceSize).map(function(x) { return x.f; });
+    if (!slice.length) continue;
+    routes.push({
+      id: 'r' + i,
+      name: 'Route ' + (i + 1),
+      color: ROUTE_COLORS[i % ROUTE_COLORS.length],
+      stops: buildStops(slice, maxStops, maxWalk),
+      riders: slice
+    });
+  }
+  return routes;
+}
+
+// k-means clustering: groups families by geographic proximity into k routes.
+function kmeansRoutes(families, k, maxStops, maxWalk) {
+  if (!families.length) return [];
+  k = Math.min(k, families.length);
+
+  // Seed centers evenly across sorted longitudes
+  var sorted = families.slice().sort(function(a, b) { return a.lon - b.lon; });
+  var step = Math.max(1, Math.floor(sorted.length / k));
+  var centers = [];
+  for (var si = 0; si < k; si++) {
+    var sf = sorted[Math.min(si * step, sorted.length - 1)];
+    centers.push({ lat: sf.lat, lon: sf.lon });
+  }
+
+  // Iterate (max 15 rounds)
+  for (var iter = 0; iter < 15; iter++) {
+    var cls = centers.map(function() { return []; });
+    families.forEach(function(f) {
+      var best = 0, bd = Infinity;
+      centers.forEach(function(c, ci) {
+        var d = haversine(f, c);
+        if (d < bd) { bd = d; best = ci; }
+      });
+      cls[best].push(f);
+    });
+    var nc = cls.map(function(cl, ci) {
+      if (!cl.length) return centers[ci];
+      return {
+        lat: cl.reduce(function(s, f) { return s + f.lat; }, 0) / cl.length,
+        lon: cl.reduce(function(s, f) { return s + f.lon; }, 0) / cl.length
+      };
+    });
+    var converged = nc.every(function(c, i) {
+      return Math.abs(c.lat - centers[i].lat) < 0.0001 &&
+             Math.abs(c.lon - centers[i].lon) < 0.0001;
+    });
+    centers = nc;
+    if (converged) break;
+  }
+
+  // Final assignment
+  var cls2 = centers.map(function() { return []; });
+  families.forEach(function(f) {
+    var best = 0, bd = Infinity;
+    centers.forEach(function(c, ci) {
+      var d = haversine(f, c);
+      if (d < bd) { bd = d; best = ci; }
+    });
+    cls2[best].push(f);
+  });
+
+  return cls2.map(function(cl, i) {
+    if (!cl.length) return null;
+    return {
+      id: 'r' + i,
+      name: 'Route ' + (i + 1),
+      color: ROUTE_COLORS[i % ROUTE_COLORS.length],
+      stops: buildStops(cl, maxStops, maxWalk),
+      riders: cl
+    };
+  }).filter(Boolean);
+}
+
+function buildStops(families,maxStops,maxWalk){
+  if(!families.length)return[];
+  const n=Math.min(maxStops,families.length);
+  let centers=families.slice(0,n).map(f=>({lat:f.lat,lon:f.lon}));
+  for(let iter=0;iter<15;iter++){
+    const sc=centers.map(()=>[]);
+    families.forEach(f=>{let b=0,bd=Infinity;centers.forEach((c,ci)=>{const d=haversine(f,c);if(d<bd){bd=d;b=ci;}});sc[b].push(f);});
+    const nc=sc.map((cl,ci)=>{if(!cl.length)return centers[ci];return{lat:cl.reduce((s,f)=>s+f.lat,0)/cl.length,lon:cl.reduce((s,f)=>s+f.lon,0)/cl.length};});
+    if(nc.every((c,i)=>Math.abs(c.lat-centers[i].lat)<0.0001))break;
+    centers=nc;
+  }
+  const sc=centers.map(()=>[]);
+  families.forEach(f=>{let b=0,bd=Infinity;centers.forEach((c,ci)=>{const d=haversine(f,c);if(d<bd){bd=d;b=ci;}});sc[b].push(f);});
+  const schoolGeo=roughGeocode(S.school.address||'Seattle WA');
+  const stops=sc.filter(c=>c.length>0).map((c,i)=>{
+    const cx=c.reduce((s,f)=>s+f.lat,0)/c.length,cy=c.reduce((s,f)=>s+f.lon,0)/c.length;
+    let best=c[0],bd=Infinity;c.forEach(f=>{const d=haversine({lat:cx,lon:cy},f);if(d<bd){bd=d;best=f;}});
+    return{id:'s'+i,name:best.address.split(',')[0],address:best.address,lat:cx,lon:cy,riders:c};
+  });
+  stops.sort((a,b)=>haversine(b,schoolGeo)-haversine(a,schoolGeo));
+  return stops;
+}
+
+// ══════════════════════════════════════════════════════════════
+// EDITOR
+// ══════════════════════════════════════════════════════════════
+function renderMetrics(){
+  const totalFams=S.families.length,totalStops=S.routes.reduce((s,r)=>s+r.stops.length,0);
+  const rideMax=S.vendor.rideMax||90, rideTarget=S.vendor.rideTarget||60;
+  const overCount=S.routes.filter(r=>r.timeStatus==='over').length;
+  const timeColor=overCount>0?'var(--red)':S.routes.some(r=>r.timeStatus==='warn')?'var(--amber)':'var(--green)';
+  const avgMins=S.routes.length?Math.round(S.routes.reduce((s,r)=>s+(r.estimatedMins||0),0)/S.routes.length):0;
+  document.getElementById('opt-metrics').innerHTML=`
+    <div class="metric"><div class="metric-val">${S.routes.length}</div><div class="metric-label">Routes</div></div>
+    <div class="metric"><div class="metric-val">${totalFams}</div><div class="metric-label">Families</div></div>
+    <div class="metric"><div class="metric-val">${totalStops}</div><div class="metric-label">Total stops</div></div>
+    <div class="metric"><div class="metric-val" style="color:${timeColor}">${avgMins}<span style="font-size:14px"> min</span></div><div class="metric-label">Avg ride time</div><div style="font-size:10px;color:var(--text3);margin-top:2px">target ${rideTarget} / max ${rideMax}</div></div>`;
+}
+function renderEditor(){
+  document.getElementById('editor-tabs').innerHTML=S.routes.map((r,i)=>{
+    const timeBadge=r.estimatedMins?` <span style="font-size:10px;opacity:.85">${r.estimatedMins}min</span>`:'';
+    const border=r.timeStatus==='over'?'2px solid var(--red)':r.timeStatus==='warn'?'2px solid var(--amber)':'1.5px solid';
+    return`<div class="route-tab" style="color:${r.color};border:${border} ${r.color};${i===S.activeRoute?'background:'+r.color+';color:#fff;':''}"
+      onclick="setActiveRoute(${i})">${r.name}${timeBadge}</div>`;
+  }).join('');
+  renderRouteEditor(S.activeRoute);
+}
+function setActiveRoute(i){S.activeRoute=i;renderEditor();}
+function parseArrival(){
+  const t=S.school.arrivalTime||'7:55 AM';
+  const m=t.match(/(\d+):(\d+)\s*(am|pm)/i);
+  if(!m)return 7*60+55;
+  let h=parseInt(m[1]),min=parseInt(m[2]);
+  if(m[3].toLowerCase()==='pm'&&h!==12)h+=12;
+  if(m[3].toLowerCase()==='am'&&h===12)h=0;
+  return h*60+min;
+}
+function fmtTime(mins){
+  mins=Math.round(mins);
+  let h=Math.floor(mins/60),m=mins%60;
+  if(m<0){m+=60;h--;}if(h<0)h+=24;
+  const ap=h>=12?'PM':'AM';if(h>12)h-=12;if(h===0)h=12;
+  return h+':'+(m<10?'0':'')+m+' '+ap;
+}
+function renderRouteEditor(i){
+  const r=S.routes[i];if(!r)return;
+  const schoolAddr=S.school.address||'School';
+  const arrMins=parseArrival();
+  const numStops=r.stops.length;
+  const perStop=Math.max(4,Math.round((arrMins-(arrMins-numStops*5))/Math.max(numStops,1)));
+  let startMins=arrMins-numStops*(perStop+1);
+  document.getElementById('editor-body').innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+      <div style="font-size:13px;color:var(--text2)">${r.riders.length} riders · ${r.stops.length} stops</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <input type="text" placeholder="Rename route…" value="${r.name}" onchange="S.routes[${i}].name=this.value;saveSession();renderEditor()" style="width:160px;font-size:12px;padding:5px 9px">
+        <button class="btn btn-sm" onclick="addStopPrompt(${i})">+ Add stop</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteRoute(${i})">Delete route</button>
+      </div>
+    </div>
+    <ul class="stop-list">${r.stops.map((s,si)=>{
+      const t=fmtTime(startMins+si*(perStop+1));
+      const ccTag=s.isCriticalCommunity?` <span class="badge badge-amber" style="font-size:10px">⭐ ${s.ccType||'Community'}</span>`:'';
+      return`<li class="stop-item">
+        <div class="stop-num" style="background:${s.isCriticalCommunity?'#d97706':r.color}">${si+1}</div>
+        <div style="flex:1">
+          <div class="stop-name">${s.name}${ccTag}</div>
+          <div class="stop-addr">${s.address}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px">Est. AM pickup: ${t}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">
+          <span class="badge badge-blue">${s.riders.length} rider${s.riders.length!==1?'s':''}</span>
+          <button class="btn btn-sm btn-ghost" style="padding:2px 7px;font-size:11px" onclick="removeStop(${i},${si})">Remove</button>
+        </div>
+      </li>`;
+    }).join('')}</ul>
+    <div style="padding:10px 0 4px;display:flex;align-items:center;gap:10px">
+      <div class="stop-num" style="background:var(--navy)">🏫</div>
+      <div><div style="font-weight:500">School — ${schoolAddr}</div><div class="stop-addr">${S.school.arrivalTime||'7:55 AM'} arrival</div></div>
+    </div>`;
+}
+function removeStop(ri,si){
+  const rem=S.routes[ri].stops.splice(si,1)[0];
+  toast('Stop removed. Riders reassigned to nearest stop.','info');
+  if(S.routes[ri].stops.length>0)rem.riders.forEach(rider=>{let best=S.routes[ri].stops[0],bd=Infinity;S.routes[ri].stops.forEach(s=>{const d=haversine(rider,s);if(d<bd){bd=d;best=s;}});best.riders.push(rider);});
+  saveSession();renderMetrics();renderEditor();
+}
+function addStopPrompt(ri){
+  showAddStopForm(ri);
+}
+function deleteRoute(ri){
+  // confirm replaced with direct action
+  S.routes.splice(ri,1);S.routes.forEach((r,i)=>r.name='Route '+(i+1));
+  S.activeRoute=Math.min(S.activeRoute,S.routes.length-1);
+  saveSession();renderMetrics();renderEditor();
+}
+function renderChanges(){
+  const card=document.getElementById('changes-card');
+  if(!S.currentRoutes.length){card.style.display='none';return;}
+  card.style.display='';
+  const curSet=new Set(S.currentRoutes.flatMap(r=>r.stops.map(s=>s.address.toLowerCase().trim())));
+  const newSet=new Set(S.routes.flatMap(r=>r.stops.map(s=>s.address.toLowerCase().trim())));
+  const added=[...newSet].filter(s=>!curSet.has(s));
+  const removed=[...curSet].filter(s=>!newSet.has(s));
+  document.getElementById('changes-body').innerHTML=`<div class="card-grid">
+    <div><div style="font-size:11px;font-weight:600;color:var(--green);margin-bottom:8px;font-family:var(--font-mono)">STOPS ADDED (${added.length})</div>
+    ${added.length?added.map(s=>`<div style="font-size:12px;padding:4px 0;border-bottom:1px solid var(--border)">+ ${s}</div>`).join(''):'<div style="font-size:12px;color:var(--text3)">None</div>'}</div>
+    <div><div style="font-size:11px;font-weight:600;color:var(--red);margin-bottom:8px;font-family:var(--font-mono)">STOPS REMOVED (${removed.length})</div>
+    ${removed.length?removed.map(s=>`<div style="font-size:12px;padding:4px 0;border-bottom:1px solid var(--border)">− ${s}</div>`).join(''):'<div style="font-size:12px;color:var(--text3)">None</div>'}</div>
+  </div>`;
+}
+
+// ══════════════════════════════════════════════════════════════
+// MAP
+// ══════════════════════════════════════════════════════════════
+function renderMap(){
+  if(!S.routes.length)return;
+  const schoolGeo=roughGeocode(S.school.address||'Seattle WA');
+  document.getElementById('map-tabs').innerHTML=S.routes.map((r,i)=>`<div class="route-tab" style="color:${r.color};border-color:${r.color};cursor:default">${r.name} (${r.stops.length} stops)</div>`).join('');
+  if(!leafletMap){
+    leafletMap=L.map('map').setView([schoolGeo.lat,schoolGeo.lon],11);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap',maxZoom:19}).addTo(leafletMap);
+  } else { mapLayers.forEach(l=>leafletMap.removeLayer(l));mapLayers=[]; }
+  const allPts=[];
+  S.routes.forEach(r=>{
+    const pts=[];
+    r.stops.forEach((s,si)=>{
+      const markerColor = s.isCriticalCommunity ? '#d97706' : r.color;
+      const markerLabel = s.isCriticalCommunity ? '★' : (si+1);
+      const markerSize  = s.isCriticalCommunity ? '16' : '11';
+      const dotSize = s.isCriticalCommunity ? 42 : 36;
+      const icon=L.divIcon({html:`<div style="background:${markerColor};color:#fff;border-radius:50%;width:${dotSize}px;height:${dotSize}px;display:flex;align-items:center;justify-content:center;font-size:${s.isCriticalCommunity?'17':'13'}px;font-weight:700;border:3px solid #fff;box-shadow:0 3px 10px rgba(0,0,0,.35);font-family:monospace;letter-spacing:-0.5px">${markerLabel}</div>`,className:'',iconSize:[dotSize,dotSize],iconAnchor:[dotSize/2,dotSize/2]});
+      const popupCC = s.isCriticalCommunity ? `<br><span style="font-size:11px;color:#d97706;font-weight:600">⭐ Critical Community — ${s.ccType||''}</span>` : '';
+      const m=L.marker([s.lat,s.lon],{icon,draggable:true}).addTo(leafletMap)
+        .bindPopup(`<b>${si+1}. ${s.name}</b><br><span style="font-size:11px;color:#666">${s.address}</span><br><span style="font-size:11px">👥 ${s.riders.length} rider${s.riders.length!==1?'s':''}</span>${popupCC}<br><span style="font-size:10px;color:#94a3b8">Drag to reposition</span>`);
+      // capture ri and si in closure
+      (function(routeIdx, stopIdx){
+        m.on('dragend', function(e){
+          const pos = e.target.getLatLng();
+          S.routes[routeIdx].stops[stopIdx].lat = pos.lat;
+          S.routes[routeIdx].stops[stopIdx].lon = pos.lng;
+          S.routes[routeIdx].stops[stopIdx].geocodedByNominatim = false; // allow re-label
+          saveSession();
+          // Redraw route line without full re-render
+          mapLayers.forEach(l=>{ if(l._isPolyline) leafletMap.removeLayer(l); });
+          mapLayers = mapLayers.filter(l=>!l._isPolyline);
+          S.routes.forEach(rr=>{
+            const schoolG=roughGeocode(S.school.address||'Seattle WA');
+            const pts=rr.stops.map(st=>[st.lat,st.lon]);
+            pts.push([schoolG.lat,schoolG.lon]);
+            if(pts.length>1){
+              const line=L.polyline(pts,{color:rr.color,weight:5,opacity:.85}).addTo(leafletMap);
+              line._isPolyline=true;mapLayers.push(line);
+            }
+          });
+          toast('Stop repositioned. Route line updated.','success',2000);
+        });
+      })(ri, si);
+      mapLayers.push(m);pts.push([s.lat,s.lon]);allPts.push([s.lat,s.lon]);
+    });
+    pts.push([schoolGeo.lat,schoolGeo.lon]);
+    if(pts.length>1){const line=L.polyline(pts,{color:r.color,weight:5,opacity:.85}).addTo(leafletMap);line._isPolyline=true;mapLayers.push(line);}
+  });
+  const sIcon=L.divIcon({html:`<div style="background:#0f1923;color:#fff;border-radius:6px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:16px;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3)">🏫</div>`,className:'',iconSize:[30,30],iconAnchor:[15,15]});
+  const sm=L.marker([schoolGeo.lat,schoolGeo.lon],{icon:sIcon}).addTo(leafletMap).bindPopup(`<b>School</b><br><span style="font-size:11px;color:#666">${S.school.address||''}</span>`);
+  mapLayers.push(sm);allPts.push([schoolGeo.lat,schoolGeo.lon]);
+  if(allPts.length>1)leafletMap.fitBounds(L.latLngBounds(allPts),{padding:[32,32]});
+  document.getElementById('map-legend').innerHTML=S.routes.map(r=>`<div class="map-legend-item"><div class="map-legend-dot" style="background:${r.color}"></div><span>${r.name} — ${r.stops.length} stops, ${r.riders.length} riders</span></div>`).join('')+`<div class="map-legend-item"><div class="map-legend-dot" style="background:#0f1923;border-radius:3px"></div><span>School</span></div>`;
+}
+
+// ══════════════════════════════════════════════════════════════
+// MAPS OUT
+// ══════════════════════════════════════════════════════════════
+function renderMapsOut(){
+  if(!S.routes.length){document.getElementById('maps-out-body').innerHTML='<div class="alert alert-warn"><span class="alert-icon">⚠</span>Run the optimizer first.</div>';return;}
+  const schoolAddr=S.school.address||'School';
+  const schoolGeo=roughGeocode(schoolAddr);
+  const arrMins=parseArrival();
+  document.getElementById('maps-out-body').innerHTML=S.routes.map(r=>{
+    const addrs=r.stops.map(s=>s.address);addrs.push(schoolAddr);
+    const enc=addrs.map(a=>encodeURIComponent(a));
+    const url='https://www.google.com/maps/dir/?api=1&origin='+enc[0]+'&destination='+enc[enc.length-1]+(enc.length>2?'&waypoints='+enc.slice(1,-1).join('|'):'')+' &travelmode=driving';
+    let totalMi=0;const pts=[...r.stops,{lat:schoolGeo.lat,lon:schoolGeo.lon}];
+    for(let i=0;i<pts.length-1;i++)totalMi+=haversine(pts[i],pts[i+1]);
+    const _spd=(document.getElementById("opt-speed")&&parseFloat(document.getElementById("opt-speed").value))||18;const estMins=Math.round(totalMi/_spd*60+r.stops.length*3);
+    const deadheadMin=S.vendor.deadheadMax||30;
+    const startMins=arrMins-estMins;
+    const yardNote=S.vendor.yardAddress?('Yard: '+S.vendor.yardAddress):'';
+    const perStop=r.stops.length>0?Math.round(estMins/r.stops.length):5;
+    return`<div class="card" style="border-left:3px solid ${r.color};margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+        <div>
+          <div style="font-size:16px;font-weight:600">${r.name}</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:2px;font-family:var(--font-mono)">${r.stops.length} stops · ${r.riders.length} riders · ~${totalMi.toFixed(1)} mi · Scholar ride: ~${estMins} min · Deadhead: ${deadheadMin} min each way · Total bus day: ~${deadheadMin+estMins+deadheadMin} min${yardNote?' · '+yardNote:''}</div>
+        </div>
+        <a href="${url}" target="_blank" rel="noopener" class="btn btn-primary btn-sm">Open in Google Maps →</a>
+      </div>
+      ${r.stops.map((s,i)=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
+        <div style="width:22px;height:22px;border-radius:50%;background:${r.color};color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0">${i+1}</div>
+        <div style="flex:1"><div style="font-weight:500">${s.name}</div><div style="color:var(--text3);font-size:11px">${s.address}</div></div>
+        <div style="font-family:var(--font-mono);font-size:11px;color:var(--text3)">${fmtTime(startMins+i*perStop)}</div>
+        <span class="badge badge-blue">${s.riders.length}r</span>
+      </div>`).join('')}
+      <div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:12px">
+        <div style="width:22px;height:22px;border-radius:4px;background:var(--navy);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0">🏫</div>
+        <div style="font-weight:600">${schoolAddr}</div>
+        <div style="margin-left:auto;font-family:var(--font-mono);font-size:11px;color:var(--text3)">${S.school.arrivalTime||'7:55 AM'}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════════════════
+// FAMILY BUS LIST — matches Impact PSE PDF format
+// ══════════════════════════════════════════════════════════════
+function renderFamilyList(){
+  if(!S.routes.length){toast('Run the optimizer first (Step 4).','warn');return;}
+  const schoolGeo=roughGeocode(S.school.address||'Seattle WA');
+  const arrMins=parseArrival();
+  const tagline=document.getElementById('fl-tagline').value.trim();
+  const contact=document.getElementById('fl-contact').value.trim();
+  const expectations=document.getElementById('fl-expectations').value.trim();
+  const date=new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+
+  const routeColors={Route1:'YELLOW',Route2:'BLUE',Route3:'GREEN',Route4:'RED',Route5:'ORANGE',Route6:'PURPLE',Route7:'TEAL',Route8:'PINK'};
+  const letterCodes='ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+  const routeTables=S.routes.map((r,ri)=>{
+    const estMins=Math.round(r.stops.reduce((s,st,i)=>{if(i===0)return s;return s+haversine(r.stops[i-1],st);},0)/12*60+r.stops.length*3)||r.stops.length*6;
+    const startMins=arrMins-estMins-10;
+    const perStop=r.stops.length>0?Math.round((estMins)/Math.max(r.stops.length,1)):6;
+    const routeLabel = r.name;
+    const rows=r.stops.map((s,si)=>{
+      const amT=fmtTime(startMins+si*perStop);
+      const pmBase=arrMins+30+ri*15+si*5;
+      const pmMTh=fmtTime(pmBase);
+      const pmFri=fmtTime(pmBase-65);
+      return`<tr>
+        <td style="font-weight:600;text-align:center">${letterCodes[si]}</td>
+        <td style="font-weight:600">${s.name}</td>
+        <td>${s.address}</td>
+        <td style="text-align:center">${amT}</td>
+        <td style="text-align:center">${pmMTh}</td>
+        <td style="text-align:center">${pmFri}</td>
+      </tr>`;
+    }).join('');
+    return`<div class="bus-list-route-header">${routeLabel}</div>
+    <table class="bus-list-table">
+      <thead><tr><th style="color:#000;font-weight:800;font-size:12px">Stop</th><th style="color:#000;font-weight:800;font-size:12px">Stop Name</th><th style="color:#000;font-weight:800;font-size:12px">Stop Address</th><th style="color:#000;font-weight:800;font-size:12px">Pick up Time</th><th style="color:#000;font-weight:800;font-size:12px">Drop off (M–Th)</th><th style="color:#000;font-weight:800;font-size:12px">Drop off (Fri)</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  }).join('');
+
+  const expectHtml=expectations?`<div style="margin-top:20px"><p><strong>Bus Family Expectations:</strong></p><div style="margin-top:8px;font-size:12px;line-height:1.8;white-space:pre-line">${expectations}</div></div>`:'';
+  const contactHtml=contact?`<p style="margin-top:16px">Please contact ${contact} if you have any questions or concerns with regards to the proposed bus routes.</p><p style="margin-top:8px">Thank You,<br><strong>${S.school.name||'School'} Leadership Team</strong></p>`:'';
+
+  document.getElementById('family-preview').innerHTML=`
+    <div class="bus-list-preview" id="bus-list-doc">
+      <div class="bus-list-header">
+        <div>
+          <div class="bus-list-school">${S.school.name||'School'}</div>
+          <div class="bus-list-subtitle">${tagline}</div>
+        </div>
+        <div style="font-size:11px;color:#888;text-align:right">${S.school.year||''}<br>${date}</div>
+      </div>
+      <p><strong>General Bus Information</strong></p>
+      <p style="margin-top:8px;font-size:12px;line-height:1.7">Attached are the bus routes for the ${S.school.year||'upcoming'} school year. This is a draft bus route, and we anticipate that routes will be adjusted accordingly to family demand and actual ridership. Stops may change routes or change in stop order based on the recommendations of our Bus Vendor prior to the start of school.</p>
+      ${expectHtml}
+      <div style="margin-top:20px">${routeTables}</div>
+      ${contactHtml}
+    </div>`;
+  document.getElementById('btn-dl-family-docx').style.display='';
+}
+
+// ── FAMILY BUS LIST DOCX DOWNLOAD ────────────────────────────
+function downloadFamilyDocx(){
+  if(!S.routes.length){toast('Click Preview bus list first.','warn');return;}
+  const arrMins=parseArrival();
+  const tagline=document.getElementById('fl-tagline').value.trim();
+  const contact=document.getElementById('fl-contact').value.trim();
+  const expectations=document.getElementById('fl-expectations').value.trim();
+  const date=new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+  const letters='ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  // Word XML helpers
+  const ns='xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
+  function rpr(opts={}){
+    return`<w:rPr>${opts.bold?'<w:b/>':''}${opts.size?`<w:sz w:val="${opts.size}"/><w:szCs w:val="${opts.size}"/>`:''}${opts.color?`<w:color w:val="${opts.color}"/>`:''}${opts.font?`<w:rFonts w:ascii="${opts.font}" w:hAnsi="${opts.font}"/>`:''}${opts.italic?'<w:i/>':''}</w:rPr>`;
+  }
+  function run(text,opts={}){return`<w:r>${rpr(opts)}<w:t xml:space="preserve">${esc(text)}</w:t></w:r>`;}
+  function para(runs,pStyle=''){
+    const ppr=pStyle?`<w:pPr><w:pStyle w:val="${pStyle}"/></w:pPr>`:'';
+    return`<w:p>${ppr}${Array.isArray(runs)?runs.join(''):runs}</w:p>`;
+  }
+  function emptyPara(){return'<w:p><w:pPr><w:spacing w:after="60"/></w:pPr></w:p>';}
+
+  // Shading helper for table header cells
+  function thCell(text){
+    return`<w:tc><w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="1A3A5C"/><w:tcBorders>${['top','left','bottom','right'].map(s=>`<w:${s} w:val="single" w:sz="4" w:color="AAAAAA"/>`).join('')}</w:tcBorders></w:tcPr>
+    ${para(run(text,{bold:true,size:18,color:'FFFFFF',font:'Calibri'}))}</w:tc>`;
+  }
+  function tdCell(text,center=false){
+    const jc=center?'<w:jc w:val="center"/>':'';
+    return`<w:tc><w:tcPr><w:tcBorders>${['top','left','bottom','right'].map(s=>`<w:${s} w:val="single" w:sz="4" w:color="CCCCCC"/>`).join('')}</w:tcBorders></w:tcPr>
+    <w:p><w:pPr>${jc}</w:pPr>${run(text,{size:18,font:'Calibri'})}</w:p></w:tc>`;
+  }
+
+  // Build route sections
+  const routeSections=S.routes.map((r,ri)=>{
+    const estMins=Math.round(r.stops.reduce((s,st,i)=>{if(i===0)return s;return s+haversine(r.stops[i-1],st);},0)/12*60+r.stops.length*3)||r.stops.length*6;
+    const startMins=arrMins-estMins-10;
+    const perStop=r.stops.length>0?Math.round(estMins/Math.max(r.stops.length,1)):6;
+    const routeLabel = r.name;
+
+    // Route header paragraph (navy background via shading on a table row)
+    const routeHeaderPara=`<w:p><w:pPr><w:shd w:val="clear" w:color="auto" w:fill="1A3A5C"/><w:spacing w:before="200" w:after="0"/></w:pPr>${run(routeLabel,{bold:true,size:22,color:'FFFFFF',font:'Calibri'})}</w:p>`;
+
+    // Table header row
+    const tblHeaderRow=`<w:tr>${['Stop','Stop Name','Stop Address','Pick up Time','Drop off (M-Th)','Drop off (Friday)'].map(thCell).join('')}</w:tr>`;
+
+    // Data rows
+    const dataRows=r.stops.map((s,si)=>{
+      const amT=fmtTime(startMins+si*perStop);
+      const pmBase=arrMins+30+ri*15+si*5;
+      const pmMTh=fmtTime(pmBase);
+      const pmFri=fmtTime(pmBase-65);
+      const shade=si%2===0?'FFFFFF':'F9FAFB';
+      return`<w:tr>
+        <w:tc><w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="${shade}"/></w:tcPr><w:p><w:pPr><w:jc w:val="center"/></w:pPr>${run(letters[si],{bold:true,size:18,font:'Calibri'})}</w:p></w:tc>
+        <w:tc><w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="${shade}"/></w:tcPr>${para(run(s.name,{bold:true,size:18,font:'Calibri'}))}</w:tc>
+        <w:tc><w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="${shade}"/></w:tcPr>${para(run(s.address,{size:18,font:'Calibri'}))}</w:tc>
+        <w:tc><w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="${shade}"/></w:tcPr><w:p><w:pPr><w:jc w:val="center"/></w:pPr>${run(amT,{size:18,font:'Calibri'})}</w:p></w:tc>
+        <w:tc><w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="${shade}"/></w:tcPr><w:p><w:pPr><w:jc w:val="center"/></w:pPr>${run(pmMTh,{size:18,font:'Calibri'})}</w:p></w:tc>
+        <w:tc><w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="${shade}"/></w:tcPr><w:p><w:pPr><w:jc w:val="center"/></w:pPr>${run(pmFri,{size:18,font:'Calibri'})}</w:p></w:tc>
+      </w:tr>`;
+    }).join('');
+
+    const table=`<w:tbl>
+      <w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblW w:w="9360" w:type="dxa"/><w:tblBorders>${['top','left','bottom','right','insideH','insideV'].map(s=>`<w:${s} w:val="single" w:sz="4" w:color="CCCCCC"/>`).join('')}</w:tblBorders></w:tblPr>
+      <w:tblGrid>${['1080','2520','3240','1080','1200','1200'].map(w=>`<w:gridCol w:w="${w}"/>`).join('')}</w:tblGrid>
+      ${tblHeaderRow}${dataRows}
+    </w:tbl>`;
+
+    return routeHeaderPara+table+emptyPara();
+  }).join('');
+
+  // Expectations section
+  const expectSection=expectations?
+    para(run('Bus Family Expectations:',{bold:true,size:20,font:'Calibri'}))+
+    expectations.split('\n').filter(l=>l.trim()).map(l=>para(run('- '+l.trim(),{size:20,font:'Calibri'}))).join('')+emptyPara()
+    :'';
+
+  // Closing
+  const closingSection=contact?
+    para(run(`Please contact ${contact} if you have any questions or concerns with regards to the proposed bus routes.`,{size:20,font:'Calibri'}))+
+    emptyPara()+
+    para(run('Thank You,',{size:20,font:'Calibri'}))+
+    para(run(`${S.school.name||'School'} Leadership Team`,{bold:true,size:20,font:'Calibri'}))
+    :'';
+
+  // Full document XML — namespaces kept minimal to avoid template literal parse issues
+  const W='http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const R='http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  const docXml='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+  +'<w:document xmlns:w="'+W+'" xmlns:r="'+R+'">'
+  +'<w:body>'
+  +'<w:p><w:pPr><w:spacing w:after="60"/><w:jc w:val="right"/></w:pPr>'
+  +run(S.school.year||'',{bold:true,size:20,color:'1A3A5C',font:'Calibri'})
+  +'</w:p>'
+  +'<w:p><w:pPr><w:spacing w:after="40"/></w:pPr>'
+  +run(S.school.name||'School',{bold:true,size:28,color:'1A3A5C',font:'Calibri'})
+  +'</w:p>'
+  +'<w:p><w:pPr><w:spacing w:after="200"/></w:pPr>'
+  +run(tagline,{italic:true,size:20,color:'555555',font:'Calibri'})
+  +'</w:p>'
+  +'<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="8" w:space="1" w:color="1A3A5C"/></w:pBdr><w:spacing w:after="200"/></w:pPr></w:p>'
+  +para(run('General Bus Information',{bold:true,size:24,color:'1A3A5C',font:'Calibri'}))
+  +emptyPara()
+  +para(run('Attached are the bus routes for the '+(S.school.year||'upcoming')+' school year. This is a draft bus route, and we anticipate that routes will be adjusted accordingly to family demand and actual ridership. Stops may change routes or change in stop order based on the recommendations of our Bus Vendor prior to the start of school.',{size:20,font:'Calibri'}))
+  +emptyPara()
+  +expectSection
+  +routeSections
+  +emptyPara()
+  +closingSection
+  +'<w:sectPr>'
+  +'<w:pgSz w:w="12240" w:h="15840"/>'
+  +'<w:pgMar w:top="1080" w:right="1080" w:bottom="1080" w:left="1080" w:header="720" w:footer="720" w:gutter="0"/>'
+  +'</w:sectPr>'
+  +'</w:body></w:document>';
+
+  const contentTypes=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`;
+  const rels=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`;
+  const wordRels=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>`;
+
+  // Reuse ZIP builder from CFO report
+  function strToBytes(str){const arr=new Uint8Array(str.length);for(let i=0;i<str.length;i++)arr[i]=str.charCodeAt(i)&0xff;return arr;}
+  function utf8Bytes(str){return new TextEncoder().encode(str);}
+  function crc32b(data){let c=0xffffffff;for(let i=0;i<data.length;i++){c^=data[i];for(let j=0;j<8;j++)c=c&1?0xedb88320^(c>>>1):c>>>1;}return(c^0xffffffff)>>>0;}
+  function u16b(n){return[n&0xff,(n>>8)&0xff];}
+  function u32b(n){return[n&0xff,(n>>8)&0xff,(n>>16)&0xff,(n>>24)&0xff];}
+  function localFile2(name,data){
+    const nameB=strToBytes(name);const crc=crc32b(data);
+    const hdr=[0x50,0x4b,0x03,0x04,20,0,...u16b(0),...u16b(8),...u16b(0),...u16b(0),...u32b(crc),...u32b(data.length),...u32b(data.length),...u16b(nameB.length),...u16b(0),...nameB,...data];
+    return{hdr:new Uint8Array(hdr),nameB,crc,size:data.length};
+  }
+  function buildZip2(files){
+    const parts=[];let offset=0;const central=[];
+    files.forEach(({name,data})=>{const f=localFile2(name,data);parts.push(f.hdr);central.push({nameB:f.nameB,crc:f.crc,size:f.size,offset});offset+=f.hdr.length;});
+    const centralParts=central.map(c=>{const b=[0x50,0x4b,0x01,0x02,20,0,20,0,...u16b(0),...u16b(8),...u16b(0),...u16b(0),...u32b(c.crc),...u32b(c.size),...u32b(c.size),...u16b(c.nameB.length),...u16b(0),...u16b(0),...u16b(0),...u16b(0),...u32b(0),...u32b(c.offset),...c.nameB];return new Uint8Array(b);});
+    const centralSize=centralParts.reduce((s,p)=>s+p.length,0);
+    const eoc=[0x50,0x4b,0x05,0x06,...u16b(0),...u16b(0),...u16b(central.length),...u16b(central.length),...u32b(centralSize),...u32b(offset),...u16b(0)];
+    const all=[...parts,...centralParts,new Uint8Array(eoc)];
+    const total=all.reduce((s,a)=>s+a.length,0);const out=new Uint8Array(total);let pos=0;all.forEach(a=>{out.set(a,pos);pos+=a.length;});return out;
+  }
+  const zip=buildZip2([
+    {name:'[Content_Types].xml',data:utf8Bytes(contentTypes)},
+    {name:'_rels/.rels',data:utf8Bytes(rels)},
+    {name:'word/document.xml',data:utf8Bytes(docXml)},
+    {name:'word/_rels/document.xml.rels',data:utf8Bytes(wordRels)},
+  ]);
+  const blob=new Blob([zip],{type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`Bus_List_${(S.school.name||'School').replace(/[^a-z0-9]/gi,'_')}_${(S.school.year||'').replace(/[^a-z0-9]/gi,'_')}.docx`;
+  a.click();
+}
+
+// ══════════════════════════════════════════════════════════════
+// CFO REPORT + DOCX DOWNLOAD
+// ══════════════════════════════════════════════════════════════
+function calcCost(r){
+  const v=S.vendor;
+  const days=Math.max(v.daysPerYear,v.minDays);
+  const schoolGeo=roughGeocode(S.school.address||'Seattle WA');
+  let mi=0;const pts=[...r.stops,{lat:schoolGeo.lat,lon:schoolGeo.lon}];
+  for(let i=0;i<pts.length-1;i++)mi+=haversine(pts[i],pts[i+1]);
+  const rtMi=mi*2;
+  let base=0;
+  if(v.rateType==='FLAT')base=v.dailyRate*days;
+  else if(v.rateType==='MILEAGE')base=v.mileageRate*rtMi*days;
+  else if(v.rateType==='HOURLY')base=v.hourlyRate*(mi/12)*2*days;
+  else base=(v.dailyRate+v.mileageRate*rtMi)*days;
+  return{base,total:base,miles:mi,days};
+}
+
+// ── CFO REPORT HTML RENDERER ─────────────────────────────────
+function buildCFOHtml(costs, grand, date) {
+  const v = S.vendor, fmt = n => '$' + Math.round(n).toLocaleString();
+  const dh = v.deadheadMax || 30;
+  const rows = costs.map((c,i) => {
+    const timeCol = c.route.estimatedMins
+      ? (c.route.timeStatus==='over'
+          ? '<span style="color:var(--red);font-weight:600">'+c.route.estimatedMins+' min ⚠</span>'
+          : c.route.timeStatus==='warn'
+            ? '<span style="color:var(--amber);font-weight:600">'+c.route.estimatedMins+' min</span>'
+            : '<span style="color:var(--green)">'+c.route.estimatedMins+' min</span>')
+      : '—';
+    return '<tr style="background:'+(i%2?'#f9fafb':'#fff')+'">'
+      +'<td style="padding:8px 12px;border:1px solid #e5e7eb;font-weight:600">'+c.route.name+'</td>'
+      +'<td style="padding:8px 12px;border:1px solid #e5e7eb;text-align:center">'+c.route.stops.length+'</td>'
+      +'<td style="padding:8px 12px;border:1px solid #e5e7eb;text-align:center">'+c.route.riders.length+'</td>'
+      +'<td style="padding:8px 12px;border:1px solid #e5e7eb;text-align:right">'+fmt(c.base)+'</td>'
+      +'<td style="padding:8px 12px;border:1px solid #e5e7eb;text-align:center">'+timeCol+'</td>'
+      +'<td style="padding:8px 12px;border:1px solid #e5e7eb;text-align:right;font-weight:600">'+fmt(c.total)+'</td>'
+      +'</tr>';
+  }).join('');
+
+  const ccRows = S.communities.length
+    ? S.communities.map(c => '<li style="margin:3px 0">&#9733; <strong>'+c.name+'</strong>'+(c.address?' — '+c.address:'')+(c.type?' ('+c.type+')':'')+(c.routePriority&&c.routePriority!=='Any'?' &mdash; anchored to '+c.routePriority:'')+'</li>').join('')
+    : '<li style="color:#888">No critical communities defined for this plan.</li>';
+
+  return '<div style="font-family:Georgia,serif;font-size:13px;line-height:1.7;color:#1a1917;max-width:720px">'
+
+    // Header
+    + '<div style="border-bottom:3px solid #1a3a5c;padding-bottom:14px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:flex-end">'
+    + '<div><div style="font-size:20px;font-weight:700;color:#1a3a5c">'+(S.school.name||'School')+'</div>'
+    + '<div style="font-size:13px;color:#475569;margin-top:2px">CFO Transportation Cost Report &mdash; '+(S.school.year||'')+'</div></div>'
+    + '<div style="text-align:right;font-size:11px;color:#888"><div>'+date+'</div>'
+    + '<div>'+( S.school.director||'')+'</div><div>'+(S.school.email||'')+'</div></div>'
+    + '</div>'
+
+    // Summary boxes
+    + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:22px">'
+    + '<div style="background:#f0f4f8;border-radius:8px;padding:12px 14px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:4px">Total Annual Cost</div><div style="font-size:22px;font-weight:700;color:#1a3a5c">'+fmt(grand)+'</div></div>'
+    + '<div style="background:#f0f4f8;border-radius:8px;padding:12px 14px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:4px">Routes</div><div style="font-size:22px;font-weight:700;color:#1a3a5c">'+S.routes.length+'</div></div>'
+    + '<div style="background:#f0f4f8;border-radius:8px;padding:12px 14px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:4px">Families Served</div><div style="font-size:22px;font-weight:700;color:#1a3a5c">'+S.families.length+'</div></div>'
+    + '<div style="background:#f0f4f8;border-radius:8px;padding:12px 14px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:4px">Vendor</div><div style="font-size:14px;font-weight:700;color:#1a3a5c;margin-top:4px">'+(v.name||'—')+'</div><div style="font-size:11px;color:#64748b">'+v.rateType+' &mdash; '+fmt(v.dailyRate)+'/route/day</div></div>'
+    + '</div>'
+
+    // Contract details
+    + '<div style="margin-bottom:20px"><div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.07em;border-bottom:1px solid #e2e8f0;padding-bottom:6px;margin-bottom:10px">Contract Details</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px">'
+    + '<div><span style="color:#64748b">School days/year:</span> '+v.daysPerYear+'</div>'
+    + '<div><span style="color:#64748b">Min billable days:</span> '+v.minDays+'</div>'
+    + '<div><span style="color:#64748b">Setup / contract fee:</span> '+fmt(v.setupFee)+'</div>'
+    + '<div><span style="color:#64748b">Max scholar ride time:</span> '+(v.rideMax||90)+' min</div>'
+    + '<div><span style="color:#64748b">Max deadhead each way:</span> '+(v.deadheadMax||30)+' min</div>'
+    + (v.yardAddress?'<div><span style="color:#64748b">Yard address:</span> '+v.yardAddress+'</div>':'')
+    + '</div></div>'
+
+    // Route table
+    + '<div style="margin-bottom:22px"><div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.07em;border-bottom:1px solid #e2e8f0;padding-bottom:6px;margin-bottom:10px">Route-by-Route Breakdown</div>'
+    + '<table style="width:100%;border-collapse:collapse;font-size:12px">'
+    + '<thead><tr style="background:#1a3a5c;color:#fff">'
+    + '<th style="padding:8px 12px;text-align:left;font-weight:600">Route</th>'
+    + '<th style="padding:8px 12px;text-align:center;font-weight:600">Stops</th>'
+    + '<th style="padding:8px 12px;text-align:center;font-weight:600">Families</th>'
+    + '<th style="padding:8px 12px;text-align:right;font-weight:600">Base Cost</th>'
+    + '<th style="padding:8px 12px;text-align:center;font-weight:600">Est. Ride Time</th>'
+    + '<th style="padding:8px 12px;text-align:right;font-weight:600">Annual Total</th>'
+    + '</tr></thead><tbody>'+rows+'</tbody>'
+    + '<tfoot><tr style="background:#1a3a5c;color:#fff">'
+    + '<td colspan="3" style="padding:8px 12px;font-weight:700">TOTAL</td>'
+    + '<td style="padding:8px 12px;text-align:right;font-weight:700">'+fmt(costs.reduce((s,c)=>s+c.base,0))+'</td>'
+    + '<td></td>'
+    + '<td style="padding:8px 12px;text-align:right;font-weight:700">'+fmt(grand)+'</td>'
+    + '</tfoot></table></div>'
+
+    // Route detail sections (proposed routes for CFO review)
+    + '<div style="margin-bottom:22px"><div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.07em;border-bottom:1px solid #e2e8f0;padding-bottom:6px;margin-bottom:14px">Proposed Bus Routes — Full Detail</div>'
+    + costs.map((c,ci) => {
+        const r = c.route;
+        const rideMin = r.estimatedMins || 0;
+        const rideTarget = S.vendor.rideTarget || 60;
+        const rideMax = S.vendor.rideMax || 90;
+        const timeColor = rideMin > rideMax ? '#dc2626' : rideMin > rideTarget ? '#d97706' : '#16a34a';
+        const timeLabel = rideMin > rideMax ? '⚠ Over limit' : rideMin > rideTarget ? '↑ Above target' : '✓ Within target';
+        return '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid '+(ROUTE_COLORS[ci%ROUTE_COLORS.length]||'#2563eb')+';border-radius:0 8px 8px 0;padding:14px 16px;margin-bottom:12px">'
+          + '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px">'
+          + '<div><div style="font-size:14px;font-weight:700;color:#1a3a5c">'+r.name+'</div>'
+          + '<div style="font-size:11px;color:#64748b;margin-top:2px">'+r.stops.length+' stops &nbsp;·&nbsp; '+r.riders.length+' families &nbsp;·&nbsp; '+c.miles.toFixed(1)+' mi est. one-way &nbsp;·&nbsp; '+fmt(c.total)+'/yr</div></div>'
+          + '<div style="text-align:right"><div style="font-size:18px;font-weight:700;color:'+timeColor+'">'+rideMin+' min</div>'
+          + '<div style="font-size:10px;color:'+timeColor+'">Scholar ride time &nbsp;'+timeLabel+'</div>'
+          + '<div style="font-size:10px;color:#94a3b8;margin-top:1px">Target: '+rideTarget+' min &nbsp;|&nbsp; Max: '+rideMax+' min</div>'
+          + '</div></div>'
+          + '<table style="width:100%;border-collapse:collapse;font-size:11px">'
+          + '<thead><tr style="background:#e2e8f0"><th style="padding:5px 8px;text-align:left">#</th><th style="padding:5px 8px;text-align:left">Stop Name</th><th style="padding:5px 8px;text-align:left">Address</th><th style="padding:5px 8px;text-align:center">Families</th></tr></thead><tbody>'
+          + r.stops.map((s,si) => '<tr style="background:'+(si%2?'#f1f5f9':'#fff')+'">'
+              + '<td style="padding:5px 8px;font-weight:600;color:#64748b">'+(si+1)+'</td>'
+              + '<td style="padding:5px 8px;font-weight:600">'+s.name+(s.isCriticalCommunity?' <span style="color:#d97706;font-size:10px">⭐</span>':'')+'</td>'
+              + '<td style="padding:5px 8px;color:#475569">'+s.address+'</td>'
+              + '<td style="padding:5px 8px;text-align:center">'+s.riders.length+'</td>'
+              + '</tr>').join('')
+          + '<tr style="background:#1a3a5c"><td style="padding:5px 8px;color:#fff;font-weight:700" colspan="3">🏫 '+( S.school.address||'School')+'</td><td style="padding:5px 8px;text-align:center;color:#fff">—</td></tr>'
+          + '</tbody></table></div>';
+      }).join('')
+    + '</div>'
+
+    // Notes
+    + '<div style="background:#f8fafc;border-left:3px solid #1a3a5c;padding:12px 16px;font-size:11px;color:#475569;border-radius:0 6px 6px 0">'
+    + '<strong>Assumptions & Notes</strong><br>'
+    + '• Route mileage estimated from geocoded coordinates (straight-line). Actual mileage may differ — confirm with '+(v.name||'vendor')+'.<br>'
+    + '• Bus service is provided at no cost to families.<br>'
+    + '• Deadhead (non-revenue travel yard &rarr; first stop and last stop &rarr; yard) not included in cost estimate unless vendor bills for it.<br>'
+    + '• Overage exposure not included. Review per-route overage terms in contract.<br>'
+    + '• All costs based on '+v.daysPerYear+' school days/year.'
+    + '</div>'
+    + '</div>';
+}
+
+function generateCFO(){
+  if(!S.routes.length){toast('Run the optimizer first (Step 4).','warn');return;}
+  const costs=S.routes.map(r=>({...calcCost(r),route:r}));
+  const grand=costs.reduce((s,c)=>s+c.total,0)+S.vendor.setupFee;
+  const totalRiders=S.families.length;
+  const fmt=n=>'$'+Math.round(n).toLocaleString();
+  const date=new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+  _cfoText=[
+    `CFO TRANSPORTATION COST REPORT`,`${'═'.repeat(60)}`,
+    `School:          ${S.school.name||'—'}`,`School Year:     ${S.school.year||'—'}`,
+    `Director:        ${S.school.director||'—'} (${S.school.email||'—'})`,`Generated:       ${date}`,``,
+    `EXECUTIVE SUMMARY`,`${'─'.repeat(60)}`,
+    `Total Annual Transportation Cost:   ${fmt(grand)}`,
+    `  Base contract cost:               ${fmt(costs.reduce((s,c)=>s+c.base,0))}`,
+    `  Contract / Setup Fee:             ${fmt(S.vendor.setupFee)}`,
+    `Number of Routes:                   ${S.routes.length}`,
+    `Total Families Served:              ${totalRiders}`,
+    `Vendor:                             ${S.vendor.name||'—'}`,
+    `Contract Rate Type:                 ${S.vendor.rateType}`,
+    `Base Daily Rate:                    ${fmt(S.vendor.dailyRate)} per route`,
+    `School Days Per Year:               ${S.vendor.daysPerYear}`,``,
+    `ROUTE-BY-ROUTE BREAKDOWN`,`${'─'.repeat(60)}`,
+    ...costs.flatMap(c=>[
+      `${c.route.name}`,
+      `  Stops:               ${c.route.stops.length}`,
+      `  Families on route:   ${c.route.riders.length}`,
+      `  Est. route miles:    ${c.miles.toFixed(1)} mi one-way`,
+      `  Scholar ride time:   ~${c.route.estimatedMins||'—'} min (target ${S.vendor.rideTarget||60} min, max ${S.vendor.rideMax||90} min)`,
+      `  Annual base cost:    ${fmt(c.total)}`,
+      `  Stop sequence:`,
+      ...c.route.stops.map((s,i)=>`    ${i+1}. ${s.name}${s.isCriticalCommunity?' ⭐':''} — ${s.address} (${s.riders.length} families)`),
+      `  → School: ${S.school.address||'—'}`,``
+    ]),
+    `ASSUMPTIONS & NOTES`,`${'─'.repeat(60)}`,
+    `• Route mileage estimated from geocoded coordinates (straight-line approximation).`,
+    `• Actual contract mileage may differ — confirm with ${S.vendor.name||'vendor'}.`,
+    `• Overage exposure not included; review per-route overage min/day in your contract.`,
+    `• All costs based on ${S.vendor.daysPerYear} school days/year.`,
+    `• Recommend reviewing stop coverage before contract finalization.`,
+  ].join('\n');
+  // Render a nicely formatted HTML preview
+  const cfoHtml = buildCFOHtml(costs, grand, date);
+  document.getElementById('cfo-preview-card').style.display='';
+  document.getElementById('cfo-text').innerHTML = cfoHtml;
+  document.getElementById('btn-dl-docx').style.display='';
+  document.getElementById('btn-dl-txt').style.display='';
+}
+function downloadTxt(){
+  const a=document.createElement('a');
+  a.href='data:text/plain;charset=utf-8,'+encodeURIComponent(_cfoText);
+  a.download=`CFO_Report_${(S.school.name||'School').replace(/[^a-z0-9]/gi,'_')}.txt`;a.click();
+}
+function downloadDocx(){
+  // Build minimal valid DOCX (ZIP with XML) using pure JS — no library needed
+  // DOCX = ZIP containing [Content_Types].xml, _rels/.rels, word/document.xml, word/_rels/document.xml.rels
+  const schoolName=S.school.name||'School';
+  const costs=S.routes.map(r=>({...calcCost(r),route:r}));
+  const grand=costs.reduce((s,c)=>s+c.total,0)+S.vendor.setupFee;
+  const fmt=n=>'$'+Math.round(n).toLocaleString();
+  const date=new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+  const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  function para(text,opts={}){
+    const sz=opts.size||20;const bold=opts.bold?'<w:b/>':'';const color=opts.color||'000000';
+    const spacing=opts.after?`<w:spacing w:after="${opts.after}"/>`:opts.before?`<w:spacing w:before="${opts.before}" w:after="60"/>`:opts.spacing||'';
+    return`<w:p><w:pPr>${spacing?`<w:jc w:val="${opts.center?'center':'left'}"/>${spacing}`:'<w:jc w:val="'+(opts.center?'center':'left')+'"/>'}<w:pStyle w:val="Normal"/></w:pPr><w:r><w:rPr>${bold}<w:sz w:val="${sz}"/><w:color w:val="${color}"/></w:rPr><w:t xml:space="preserve">${esc(text)}</w:t></w:r></w:p>`;
+  }
+  function heading(text,sz=28,color='1A3A5C'){return para(text,{size:sz,bold:true,color,after:'120',before:'200'});}
+  function subheading(text){return para(text,{size:22,bold:true,color:'2563EB',after:'80',before:'160'});}
+  function body(text){return para(text,{size:20,after:'60'});}
+  function rule(){return`<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="4" w:space="1" w:color="E2E8F0"/></w:pBdr></w:pPr></w:p>`;}
+
+  const routeBlocks=costs.map(c=>[
+    subheading(c.route.name),
+    body('Stops: '+c.route.stops.length+'  |  Families: '+c.route.riders.length+'  |  Est. miles (one-way): '+c.miles.toFixed(1)+'  |  Annual cost: '+fmt(c.total)),
+    body('Scholar ride time: ~'+(c.route.estimatedMins||'—')+' min  (Target: '+(S.vendor.rideTarget||60)+' min  |  Max: '+(S.vendor.rideMax||90)+' min)'),
+    body('Stop sequence:'),
+    ...c.route.stops.map((s,i)=>body('  '+(i+1)+'. '+s.name+(s.isCriticalCommunity?' ⭐':'')+' — '+s.address+' ('+s.riders.length+' families)')),
+    body('  → School: '+(S.school.address||'—')),
+    rule(),
+  ].join('')).join('');
+
+  const W2='http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const R2='http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  const docXml='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+  +'<w:document xmlns:w="'+W2+'" xmlns:r="'+R2+'">'
+  +'<w:body>'
+  +heading('CFO Transportation Cost Report',32)
+  +body(schoolName+' | '+S.school.year)
+  +body('Director: '+(S.school.director||'—')+' | '+(S.school.email||'—'))
+  +body('Generated: '+date)
+  +rule()
+  +heading('Executive Summary',26)
+  +body('Total Annual Transportation Cost: '+fmt(grand))
+  +body('  Base contract cost: '+fmt(costs.reduce((s,c)=>s+c.base,0)))
+  +body('  Contract / Setup Fee: '+fmt(S.vendor.setupFee))
+  +body('Number of Routes: '+S.routes.length)
+  +body('Total Families Served: '+S.families.length)
+  +body('Vendor: '+(S.vendor.name||'—')+' | Rate Type: '+S.vendor.rateType+' | Daily Rate: '+fmt(S.vendor.dailyRate))
+  +body('School Days Per Year: '+S.vendor.daysPerYear)
+  +rule()
+  +heading('Route-by-Route Breakdown',26)
+  +routeBlocks
+  +heading('Assumptions & Notes',22,'475569')
+  +body('* Route mileage estimated from geocoded coordinates (straight-line approximation).')
+  +body('* Actual contract mileage may differ — confirm with '+(S.vendor.name||'your vendor')+'.')
+  +body('* Overage exposure not included; review per-route overage in contract.')
+  +body('* All costs based on '+S.vendor.daysPerYear+' school days/year.')
+  +'<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>'
+  +'</w:body></w:document>';
+
+  const contentTypes=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`;
+  const rels=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`;
+  const wordRels=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>`;
+
+  // Build ZIP using a minimal implementation
+  function strToBytes(str){const arr=new Uint8Array(str.length);for(let i=0;i<str.length;i++)arr[i]=str.charCodeAt(i)&0xff;return arr;}
+  function utf8Bytes(str){return new TextEncoder().encode(str);}
+  function crc32(data){let c=0xffffffff;for(let i=0;i<data.length;i++){c^=data[i];for(let j=0;j<8;j++)c=c&1?0xedb88320^(c>>>1):c>>>1;}return(c^0xffffffff)>>>0;}
+  function u16(n){return[n&0xff,(n>>8)&0xff];}
+  function u32(n){return[n&0xff,(n>>8)&0xff,(n>>16)&0xff,(n>>24)&0xff];}
+  function localFile(name,data){
+    const nameB=strToBytes(name);
+    const crc=crc32(data);
+    const hdr=[0x50,0x4b,0x03,0x04,20,0,...u16(0),...u16(8),...u16(0),...u16(0),...u32(crc),...u32(data.length),...u32(data.length),...u16(nameB.length),...u16(0),...nameB,...data];
+    return{hdr:new Uint8Array(hdr),nameB,crc,size:data.length};
+  }
+  function buildZip(files){
+    const parts=[];let offset=0;const central=[];
+    files.forEach(({name,data})=>{
+      const f=localFile(name,data);
+      parts.push(f.hdr);
+      const nameB=f.nameB;
+      central.push({nameB,crc:f.crc,size:f.size,offset});
+      offset+=f.hdr.length;
+    });
+    const centralParts=central.map(c=>{
+      const b=[0x50,0x4b,0x01,0x02,20,0,20,0,...u16(0),...u16(8),...u16(0),...u16(0),...u32(c.crc),...u32(c.size),...u32(c.size),...u16(c.nameB.length),...u16(0),...u16(0),...u16(0),...u16(0),...u32(0),...u32(c.offset),...c.nameB];
+      return new Uint8Array(b);
+    });
+    const centralSize=centralParts.reduce((s,p)=>s+p.length,0);
+    const endOfCentral=[0x50,0x4b,0x05,0x06,...u16(0),...u16(0),...u16(central.length),...u16(central.length),...u32(centralSize),...u32(offset),...u16(0)];
+    const all=[...parts,...centralParts,new Uint8Array(endOfCentral)];
+    const total=all.reduce((s,a)=>s+a.length,0);
+    const out=new Uint8Array(total);let pos=0;
+    all.forEach(a=>{out.set(a,pos);pos+=a.length;});
+    return out;
+  }
+  const zip=buildZip([
+    {name:'[Content_Types].xml',data:utf8Bytes(contentTypes)},
+    {name:'_rels/.rels',data:utf8Bytes(rels)},
+    {name:'word/document.xml',data:utf8Bytes(docXml)},
+    {name:'word/_rels/document.xml.rels',data:utf8Bytes(wordRels)},
+  ]);
+  const blob=new Blob([zip],{type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`CFO_Report_${(S.school.name||'School').replace(/[^a-z0-9]/gi,'_')}_${(S.school.year||'').replace(/[^a-z0-9]/gi,'_')}.docx`;
+  a.click();
+}
+
+// ══════════════════════════════════════════════════════════════
+// UTILITIES
+// ══════════════════════════════════════════════════════════════
+function downloadRouteTemplate(){
+  const csv='Route Name,Stop Name,Stop Address\nRoute A,Campus View Apartments,"34104 1st Pl South, Federal Way, WA 98003"\nRoute A,Federal Way Community Center,"876 S 333rd St, Federal Way, WA"\nRoute B,Southwest Boys & Girls,"9800 8th Ave SW, Seattle, WA"\n';
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='current_routes_template.csv';a.click();
+}
+
+// ══════════════════════════════════════════════════════════════
+// INIT — restore session on page load
+// ══════════════════════════════════════════════════════════════
+(function init(){
+  toggleRateFields();
+  const snap=loadSession();
+  if(snap&&snap.school&&snap.school.name){
+    restoreFormValues();
+    unlockFromState();
+    updateSidebar();
+    const banner=document.getElementById('session-resume-banner');
+    if(banner){
+      banner.innerHTML=`<div class="session-banner">
+        <span>⬤ Restored session: <strong>${snap.school.name}</strong> — last saved ${new Date(snap.savedAt).toLocaleString()}</span>
+        <button class="btn btn-sm btn-ghost" style="color:inherit;border-color:rgba(13,148,136,.4)" onclick="this.parentElement.style.display='none'">Dismiss</button>
+      </div>`;
+    }
+    document.getElementById('sb-save-indicator').style.display='block';
+    document.getElementById('sb-save-indicator').textContent='⬤ Session restored';
+  }
+})();
+</script>
+</body>
+</html>
