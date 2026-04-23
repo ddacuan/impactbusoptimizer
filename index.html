@@ -1061,7 +1061,6 @@ function parseAddressesFromText(text,type,filename){
       if(!addr&&addrIdx<0) addr=findAddressInRow(row);
       if(!addr||addr.length<5)continue;
       addr=cleanAddr(addr);
-      if(!addr||addr.length<6)continue;
       let name='';
       if(firstIdx>=0&&lastIdx>=0) name=(row[firstIdx]||'')+' '+(row[lastIdx]||'');
       else if(nameIdx>=0) name=row[nameIdx]||'';
@@ -1074,7 +1073,6 @@ function parseAddressesFromText(text,type,filename){
     lines.forEach(line=>{
       if(isAddressLike(line)){
         const addr=cleanAddr(line);
-        if(!addr||addr.length<6)continue;
         const geo=roughGeocode(addr);
         parsed.push({id:rndId(),name:'',address:addr,grade:'',lat:geo.lat,lon:geo.lon,type});
       }
@@ -1108,7 +1106,7 @@ function parseRoutesFromText(text,filename){
         var addr=(row[aIdx]||'').trim();
         if(!addr) continue;
         if(!routeMap[rName]) routeMap[rName]=[];
-        var _ca1=cleanAddr(addr); if(_ca1&&_ca1.length>=6) routeMap[rName].push({name:sName||_ca1.split(',')[0], address:_ca1});
+        routeMap[rName].push({name:sName||addr.split(',')[0], address:cleanAddr(addr)});
       }
     } else if(aIdx>=0){
       // Address column only — single route
@@ -1117,7 +1115,7 @@ function parseRoutesFromText(text,filename){
         var addr=(row[aIdx]||'').trim(); if(!addr) continue;
         var sName=sIdx>=0?(row[sIdx]||'').trim():'';
         if(!routeMap['Route 1']) routeMap['Route 1']=[];
-        var _ca2=cleanAddr(addr); if(_ca2&&_ca2.length>=6) routeMap['Route 1'].push({name:sName||_ca2.split(',')[0], address:_ca2});
+        routeMap['Route 1'].push({name:sName||addr.split(',')[0], address:cleanAddr(addr)});
       }
     }
   }
@@ -1138,7 +1136,6 @@ function parseRoutesFromText(text,filename){
       }
       if(currentRoute && isAddressLike(line)){
         var addr=cleanAddr(line); stopCounter++;
-        if(!addr||addr.length<6){lastNonAddrLine="";return;}
         var name=lastNonAddrLine&&lastNonAddrLine.length<80?lastNonAddrLine:('Stop '+stopCounter);
         routeMap[currentRoute].push({name:name, address:addr});
         lastNonAddrLine='';
@@ -1165,17 +1162,9 @@ function parseRoutesFromText(text,filename){
 function rndId(){return Math.random().toString(36).slice(2);}
 function splitCSVLine(line){const result=[];let cur='',inQ=false;for(let c of line){if(c==='"'){inQ=!inQ;}else if(c===','&&!inQ){result.push(cur.trim());cur='';}else cur+=c;}result.push(cur.trim());return result;}
 function findColIdx(headers,keywords){for(let i=0;i<headers.length;i++)for(const k of keywords)if(headers[i].includes(k))return i;return -1;}
-function isAddressLike(s){
-  if(!s || s.length < 6 || s.length > 120) return false;
-  if(/[|\\]/.test(s)) return false;                          // reject pipe/backslash artifacts
-  if(/^\s*[\d|\s]+\s*$/.test(s)) return false;              // reject number-only or pipe-only strings
-  if(/^\s*\d{1,2}\s*[|,]\s*\d/.test(s)) return false;      // reject "3 | 3" or "5, 2" row patterns
-  if(!/\d+\s+\w/.test(s)) return false;                      // must start with a house number
-  if(/(ave|st|blvd|way|rd|dr|ln|pl|ct|pkwy|hwy|south|north|east|west|sw|se|ne|nw)/i.test(s)) return true;
-  return false;
-}
+function isAddressLike(s){return/\d+\s+\w/.test(s)&&/(ave|st|blvd|way|rd|dr|ln|pl|ct|pkwy|hwy|blvd|south|north|east|west|sw|se|ne|nw)/i.test(s)&&s.length>8&&s.length<120;}
 function findAddressInRow(row){return row.find(c=>isAddressLike(c))||'';}
-function cleanAddr(addr){let a=addr.replace(/^[a-zA-Z]\s+/,'').replace(/\s+/g,' ').trim();if(/[|\\]/.test(a)||/^[\d\s,|]+$/.test(a))return '';if(!/seattle|federal way|auburn|kent|renton|burien|seatac|des moines|tukwila|wa\s*\d{5}/i.test(a)&&a.length<60)a+=', WA';return a;}
+function cleanAddr(addr){let a=addr.replace(/^[a-zA-Z]\s+/,'').replace(/\s+/g,' ').trim();if(!/seattle|federal way|auburn|kent|renton|burien|seatac|des moines|tukwila|wa\s*\d{5}/i.test(a)&&a.length<60)a+=', WA';return a;}
 
 function showUploadPreview(type,parsed,filename){
   const id=type+'-preview';
@@ -1245,7 +1234,6 @@ function parseCommunitiesFromText(text, filename) {
 
       if (isAddressLike(line)) {
         const addr = cleanAddr(line);
-        if(!addr||addr.length<6)return;
         const geo  = roughGeocode(addr);
         parsed.push({id:rndId(), name:addr.split(',')[0], address:addr, routePriority:'', type:inferType(line), lat:geo.lat, lon:geo.lon});
       } else if (locationKeywords.test(line) && line.length > 4 && line.length < 80) {
