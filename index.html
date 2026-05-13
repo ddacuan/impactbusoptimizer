@@ -324,30 +324,6 @@ tr:hover td{background:var(--surface3)}
   </div>
 
   <div class="card">
-    <div class="card-title">Revenue impact settings</div>
-    <div class="alert alert-info" style="margin-bottom:12px"><span class="alert-icon">ℹ</span>
-      Used to calculate the revenue risk of closing a stop. If a stop is removed and a rider doesn't enroll, the school loses that per-student revenue.
-    </div>
-    <div class="card-grid-3">
-      <div class="fg">
-        <label>Revenue per enrolled student ($)</label>
-        <input id="v-revenue-per-student" type="number" value="10000" min="0" step="500">
-        <div style="font-size:11px;color:var(--text3);margin-top:3px">Default: $10,000 per student</div>
-      </div>
-      <div class="fg">
-        <label>Est. enrollment risk if stop removed (%)</label>
-        <input id="v-enrollment-risk" type="number" value="60" min="0" max="100">
-        <div style="font-size:11px;color:var(--text3);margin-top:3px">% of riders at a removed stop likely to not enroll</div>
-      </div>
-      <div class="fg">
-        <label>Max scholars on a bus (override)</label>
-        <input id="v-manual-capacity" type="number" value="" min="1" max="200" placeholder="e.g. 70 — overrides fleet table">
-        <div style="font-size:11px;color:var(--text3);margin-top:3px">Leave blank to use per-bus fleet capacities</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="card">
     <div class="card-title">Geographic boundaries <span style="font-size:10px;font-weight:400;color:var(--text3)">(optional)</span></div>
     <div class="card-desc">Set hard limits on how far routes can extend in any direction. The optimizer will exclude any family address outside these boundaries and flag them as unserviceable.</div>
     <div class="card-grid">
@@ -846,35 +822,47 @@ const S = {
 
 // ── FLEET BUILDER ─────────────────────────────────────────────
 function addFleetRow(bus) {
-  bus = bus || {name:'Bus '+(S.fleet.length+1), vendor:'', capacity:70, dailyRate:800, rateType:'FLAT'};
-  S.fleet.push(bus);
-  renderFleetTable();
+  try {
+    bus = bus || {name:'Bus '+(S.fleet.length+1), vendor:'', capacity:70, dailyRate:800, rateType:'FLAT'};
+    S.fleet.push(bus);
+    renderFleetTable();
+    saveSession();
+    // Sync number of routes field to fleet count
+    var routesEl = document.getElementById('opt-routes');
+    if (routesEl) routesEl.value = S.fleet.length;
+  } catch(e) { console.error('addFleetRow error:', e); }
 }
 function removeFleetRow(i) {
   S.fleet.splice(i,1);
   renderFleetTable();
   saveSession();
+  var routesEl = document.getElementById('opt-routes');
+  if (routesEl && S.fleet.length > 0) routesEl.value = S.fleet.length;
 }
 function renderFleetTable() {
-  var tbody = document.getElementById('fleet-tbody');
-  if (!tbody) return;
-  if (!S.fleet.length) {
-    tbody.innerHTML = '<tr><td colspan="6" style="color:var(--text3);text-align:center;padding:14px">No buses added yet — click "+ Add bus" below</td></tr>';
-    return;
-  }
-  tbody.innerHTML = S.fleet.map(function(b,i) {
-    var rateOpts = ['FLAT','MILEAGE','HOURLY','HYBRID'].map(function(r) {
-      return '<option'+(b.rateType===r?' selected':'')+'>'+r+'</option>';
+  try {
+    var tbody = document.getElementById('fleet-tbody');
+    if (!tbody) return;
+    if (!S.fleet.length) {
+      tbody.innerHTML = '<tr><td colspan="6" style="color:var(--text3);text-align:center;padding:14px">No buses configured — click "+ Add bus" below.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = S.fleet.map(function(b,i) {
+      var rateOpts = ['FLAT','MILEAGE','HOURLY','HYBRID'].map(function(r) {
+        return '<option'+(b.rateType===r?' selected':'')+'>'+r+'</option>';
+      }).join('');
+      var nameSafe = (b.name||'').replace(/"/g,'&quot;');
+      var vendorSafe = (b.vendor||'').replace(/"/g,'&quot;');
+      return '<tr style="background:'+(i%2===0?'var(--surface)':'var(--surface2)')+'">'
+        +'<td style="padding:6px 8px"><input style="width:100%;font-size:12px;padding:4px 7px;border:1px solid var(--border);border-radius:4px;background:var(--surface)" value="'+nameSafe+'" placeholder="e.g. Bus 1" onchange="S.fleet['+i+'].name=this.value;saveSession()"></td>'
+        +'<td style="padding:6px 8px"><input style="width:100%;font-size:12px;padding:4px 7px;border:1px solid var(--border);border-radius:4px;background:var(--surface)" value="'+vendorSafe+'" placeholder="e.g. FirstStudent" onchange="S.fleet['+i+'].vendor=this.value;saveSession()"></td>'
+        +'<td style="padding:6px 8px"><input type="number" style="width:80px;font-size:12px;padding:4px 7px;border:1px solid var(--border);border-radius:4px;background:var(--surface)" value="'+(b.capacity||70)+'" min="1" max="200" onchange="S.fleet['+i+'].capacity=parseInt(this.value)||70;saveSession()"></td>'
+        +'<td style="padding:6px 8px"><input type="number" style="width:90px;font-size:12px;padding:4px 7px;border:1px solid var(--border);border-radius:4px;background:var(--surface)" value="'+(b.dailyRate||0)+'" min="0" onchange="S.fleet['+i+'].dailyRate=parseFloat(this.value)||0;saveSession()"></td>'
+        +'<td style="padding:6px 8px"><select style="font-size:12px;padding:4px 7px;border:1px solid var(--border);border-radius:4px;background:var(--surface)" onchange="S.fleet['+i+'].rateType=this.value;saveSession()">'+rateOpts+'</select></td>'
+        +'<td style="padding:6px 8px;text-align:center"><button class="btn btn-sm" style="padding:3px 10px;font-size:11px;color:var(--red);border-color:var(--red)" onclick="removeFleetRow('+i+')">✕</button></td>'
+        +'</tr>';
     }).join('');
-    return '<tr>'
-      +'<td><input style="width:100%;font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:4px" value="'+escHtml(b.name||'')+'" placeholder="e.g. Route A Bus" onchange="S.fleet['+i+'].name=this.value;saveSession()"></td>'
-      +'<td><input style="width:100%;font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:4px" value="'+escHtml(b.vendor||'')+'" placeholder="e.g. FirstStudent" onchange="S.fleet['+i+'].vendor=this.value;saveSession()"></td>'
-      +'<td><input type="number" style="width:80px;font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:4px" value="'+b.capacity+'" min="1" max="200" onchange="S.fleet['+i+'].capacity=parseInt(this.value)||70;saveSession()"></td>'
-      +'<td><input type="number" style="width:90px;font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:4px" value="'+b.dailyRate+'" min="0" onchange="S.fleet['+i+'].dailyRate=parseFloat(this.value)||0;saveSession()"></td>'
-      +'<td><select style="font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:4px" onchange="S.fleet['+i+'].rateType=this.value;saveSession()">'+rateOpts+'</select></td>'
-      +'<td><button class="btn btn-sm" style="padding:3px 8px;font-size:11px;color:var(--red);border-color:var(--red)" onclick="removeFleetRow('+i+')">✕</button></td>'
-      +'</tr>';
-  }).join('');
+  } catch(e) { console.error('renderFleetTable error:', e); }
 }
 let leafletMap = null, mapLayers = [];
 let _cfoText = '';
@@ -1033,8 +1021,6 @@ function restoreFormValues() {
   set('v-name',v.name); set('v-rate-type',v.rateType); set('v-daily',v.dailyRate);
   set('v-mileage',v.mileageRate); set('v-hourly',v.hourlyRate); set('v-days',v.daysPerYear);
   set('v-min-days',v.minDays); set('v-overage',v.overageRate); set('v-setup-fee',v.setupFee);
-  set('v-revenue-per-student',v.revenuePerStudent||10000);
-  set('v-enrollment-risk',v.enrollmentRisk||60);
   set('v-deadhead-billed', v.deadheadBilled||'no');
   set('v-deadhead-rate',   v.deadheadRate||0);
   toggleRateFields();
@@ -1262,8 +1248,8 @@ function saveSetup(){
       boundarySouth: getField('b-south','').trim(),
       boundaryEast:  getField('b-east','').trim(),
       boundaryWest:  getField('b-west','').trim(),
-      revenuePerStudent: parseFloat(getField('v-revenue-per-student','10000')) || 10000,
-      enrollmentRisk:    parseFloat(getField('v-enrollment-risk','60'))        || 60,
+      revenuePerStudent: 10000,   // $10,000 per enrolled student (hardcoded)
+      enrollmentRisk:    60,       // 60% of riders at a removed stop likely to not enroll (hardcoded)
     };
     // Sync fleet row count with number of routes if fleet is empty
     if (!S.fleet.length && S.routes.length) {
@@ -1889,9 +1875,10 @@ function runOptimizer(){
       var maxStops    = getVal('opt-stops',      8,    parseInt);
       var maxRadius   = getVal('opt-max-radius', 0,    parseFloat);
       // Manual capacity override takes precedence, then fleet average, then field
-      var manualCap = getVal('v-manual-capacity', 0, parseInt);
-      var maxCapacity = manualCap > 0 ? manualCap
-        : (S.fleet.length > 0 ? Math.max.apply(null, S.fleet.map(function(b){return b.capacity||70;})) : getVal('opt-capacity', 70, parseInt));
+      // Capacity comes from fleet table (max across all buses) or the optimizer field
+      var maxCapacity = S.fleet.length > 0
+        ? Math.max.apply(null, S.fleet.map(function(b){ return b.capacity||70; }))
+        : getVal('opt-capacity', 70, parseInt);
       var clusterEl   = document.getElementById('opt-cluster-method');
       var clusterMethod = (clusterEl && clusterEl.value) ? clusterEl.value : 'sector';
 
@@ -3520,7 +3507,6 @@ function downloadRouteTemplate(){
 // ══════════════════════════════════════════════════════════════
 (function init(){
   toggleRateFields();
-  renderFleetTable();
   const snap=loadSession();
   if(snap&&snap.school&&snap.school.name){
     restoreFormValues();
@@ -3535,7 +3521,18 @@ function downloadRouteTemplate(){
     }
     document.getElementById('sb-save-indicator').style.display='block';
     document.getElementById('sb-save-indicator').textContent='⬤ Session restored';
+  } else {
+    // Fresh load — seed fleet with 4 default buses so DSOs see the table immediately
+    if (!S.fleet.length) {
+      ['Bus 1','Bus 2','Bus 3','Bus 4'].forEach(function(name) {
+        S.fleet.push({name:name, vendor:'', capacity:70, dailyRate:800, rateType:'FLAT'});
+      });
+    }
   }
+  renderFleetTable();
+  // Sync route count to fleet size
+  var routesEl = document.getElementById('opt-routes');
+  if (routesEl && S.fleet.length > 0) routesEl.value = S.fleet.length;
 })();
 </script>
 </body>
