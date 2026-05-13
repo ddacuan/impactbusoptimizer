@@ -138,6 +138,9 @@ tr:hover td{background:var(--surface3)}
 .bus-list-table th{background:#e2e8f0;padding:6px 10px;text-align:left;border:1px solid #d1d5db;font-size:11px;text-transform:uppercase;letter-spacing:.04em;font-weight:800;color:#000}
 .bus-list-table td{padding:7px 10px;border:1px solid #e5e7eb;vertical-align:top}
 .bus-list-table tr:nth-child(even) td{background:#f9fafb}
+.sticky-save{position:sticky;bottom:0;background:rgba(255,255,255,.97);border-top:1px solid var(--border);padding:10px 0;margin-top:20px;display:flex;align-items:center;gap:10px;backdrop-filter:blur(4px);z-index:100}
+.sticky-save .save-indicator{font-size:12px;color:var(--text3);font-family:var(--font-mono)}
+.sticky-save .save-indicator.saved{color:var(--teal)}
 @media print{
   .sidebar,.btn-group,.session-banner,.route-tabs,.alert,.card-title{display:none!important}
   .main{background:#fff}
@@ -191,12 +194,26 @@ tr:hover td{background:var(--surface3)}
     <button class="sb-item locked" id="nav-maps-out" onclick="go('maps-out')"><span class="sb-num">7</span>Google Maps links</button>
     <button class="sb-item locked" id="nav-family" onclick="go('family')"><span class="sb-num">8</span>Family bus list</button>
     <button class="sb-item locked" id="nav-cfo" onclick="go('cfo')"><span class="sb-num">9</span>CFO report</button>
-    <div class="sb-section">Session</div>
-    <button class="sb-item" onclick="exportSession()"><span class="sb-num">⬇</span>Export session</button>
-    <button class="sb-item" onclick="document.getElementById('fi-session').click()"><span class="sb-num">⬆</span>Import session</button>
+    <div class="sb-section">Save &amp; restore</div>
+    <button class="sb-item" onclick="copySaveCode()" title="Copies a save code you can paste into any text doc or email"><span class="sb-num">📋</span>Copy save code</button>
+    <button class="sb-item" onclick="showPasteSaveCode()" title="Paste a previously copied save code to restore your work"><span class="sb-num">📥</span>Paste save code</button>
+    <button class="sb-item" onclick="exportSession()" title="Download a backup file"><span class="sb-num">⬇</span>Download backup</button>
     <input type="file" id="fi-session" accept=".json" style="display:none" onchange="importSession(event)">
   </nav>
-  <div class="sb-footer">Auto-saves to this browser.<br>Export session to use on another device.</div>
+  <div class="sb-footer">Auto-saves to this browser.<br>Use <strong>Copy save code</strong> to save your work as text — paste it into any doc or email and restore it here anytime.</div>
+  <!-- Paste save code modal -->
+  <div id="paste-code-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:none;align-items:center;justify-content:center">
+    <div style="background:#fff;border-radius:12px;padding:24px;max-width:480px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.25)">
+      <div style="font-size:15px;font-weight:600;margin-bottom:12px">Paste your save code</div>
+      <div style="font-size:13px;color:#475569;margin-bottom:10px">Paste the save code you copied earlier. It starts with <code style="background:#f1f5f9;padding:1px 5px;border-radius:3px">BRO:</code></div>
+      <textarea id="paste-code-input" rows="6" style="width:100%;font-family:monospace;font-size:11px;padding:10px;border:1px solid #e2e8f0;border-radius:6px;resize:vertical" placeholder="BRO:eyJzY2hvb2wi..."></textarea>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="btn btn-primary" onclick="restoreFromCode()">Restore</button>
+        <button class="btn btn-ghost" onclick="hidePasteSaveCode()">Cancel</button>
+      </div>
+      <div id="paste-code-error" style="color:#dc2626;font-size:12px;margin-top:8px;display:none"></div>
+    </div>
+  </div>
 </aside>
 
 <!-- MAIN -->
@@ -249,9 +266,9 @@ tr:hover td{background:var(--surface3)}
     <div class="fg"><label>Contract / setup fee ($ one-time)</label><input id="v-setup-fee" type="number" value="0"></div>
   </div>
   <div class="card">
-    <div class="card-title">Bus yard &amp; route time limits</div>
+    <div class="card-title">Bus yard, deadhead &amp; route time limits</div>
     <div class="alert alert-info" style="margin-bottom:14px"><span class="alert-icon">ℹ</span>
-      <strong>Deadhead</strong> = non-revenue travel between the vendor yard and your first/last stop. The optimizer will flag routes that exceed your scholar ride time limit.
+      <strong>Deadhead</strong> = non-revenue travel between the vendor yard and your first/last stop. Some vendors bill for deadhead time; others don't. Toggle this to correctly calculate your true contract cost.
     </div>
     <div class="fg"><label>Vendor yard address</label><input id="v-yard-addr" type="text" placeholder="e.g. 1234 Industrial Way, Auburn, WA 98001"></div>
     <div class="card-grid-3">
@@ -259,10 +276,74 @@ tr:hover td{background:var(--surface3)}
       <div class="fg"><label>Max scholar ride time (min)</label><input id="v-ride-max" type="number" value="90" min="20" max="180" oninput="updateRideDisplay()"></div>
       <div class="fg"><label>Target scholar ride time (min)</label><input id="v-ride-target" type="number" value="60" min="20" max="180"></div>
     </div>
-    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r2);padding:10px 14px;font-size:12px;color:var(--text2)">
-      Total max bus day = deadhead (30 min) + scholar ride (<span id="ride-max-display">90</span> min) + deadhead (30 min) = <strong><span id="total-max-display">150</span> min</strong>
+    <div class="card-grid" style="margin-top:4px">
+      <div class="fg">
+        <label>Does your vendor charge for deadhead?</label>
+        <select id="v-deadhead-billed" onchange="updateDeadheadNote()">
+          <option value="no">No — deadhead is not billed (flat route rate only)</option>
+          <option value="yes">Yes — deadhead time is billed at the hourly/daily rate</option>
+          <option value="partial">Partial — only one-way deadhead is billed</option>
+        </select>
+      </div>
+      <div class="fg">
+        <label>Deadhead billing rate ($/min, if billed)</label>
+        <input id="v-deadhead-rate" type="number" value="0" step="0.01" min="0" placeholder="e.g. 1.50 per minute">
+        <div style="font-size:11px;color:var(--text3);margin-top:3px" id="deadhead-rate-note">Enter 0 to use the daily route rate pro-rated by time.</div>
+      </div>
+    </div>
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r2);padding:10px 14px;font-size:12px;color:var(--text2)" id="ride-display-box">
+      Total max bus day = deadhead (<span id="dh-display">30</span> min each way) + scholar ride (<span id="ride-max-display">90</span> min) + deadhead (<span id="dh-display2">30</span> min) = <strong><span id="total-max-display">150</span> min</strong>
+      <span id="deadhead-billed-note" style="margin-left:8px;color:var(--amber);font-weight:500"></span>
     </div>
   </div>
+  <div class="card">
+    <div class="card-title">Fleet configuration — buses &amp; vendors <span style="font-size:10px;font-weight:400;color:var(--text3)">(add one row per bus)</span></div>
+    <div class="alert alert-info" style="margin-bottom:12px"><span class="alert-icon">ℹ</span>
+      Add each bus separately — even if from different vendors. Each bus can have its own capacity, daily rate, and vendor name. The optimizer will assign one route per bus.
+    </div>
+    <div class="tbl-wrap" style="margin-bottom:10px">
+      <table id="fleet-table">
+        <thead><tr>
+          <th>Bus / Route name</th>
+          <th>Vendor</th>
+          <th>Capacity (riders)</th>
+          <th>Daily rate ($)</th>
+          <th>Rate type</th>
+          <th></th>
+        </tr></thead>
+        <tbody id="fleet-tbody"></tbody>
+      </table>
+    </div>
+    <button class="btn btn-sm" onclick="addFleetRow()">+ Add bus</button>
+    <div style="font-size:11px;color:var(--text3);margin-top:8px">
+      The number of buses you add here sets the number of routes the optimizer creates.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Revenue impact settings</div>
+    <div class="alert alert-info" style="margin-bottom:12px"><span class="alert-icon">ℹ</span>
+      Used to calculate the revenue risk of closing a stop. If a stop is removed and a rider doesn't enroll, the school loses that per-student revenue.
+    </div>
+    <div class="card-grid-3">
+      <div class="fg">
+        <label>Revenue per enrolled student ($)</label>
+        <input id="v-revenue-per-student" type="number" value="10000" min="0" step="500">
+        <div style="font-size:11px;color:var(--text3);margin-top:3px">Default: $10,000 per student</div>
+      </div>
+      <div class="fg">
+        <label>Est. enrollment risk if stop removed (%)</label>
+        <input id="v-enrollment-risk" type="number" value="60" min="0" max="100">
+        <div style="font-size:11px;color:var(--text3);margin-top:3px">% of riders at a removed stop likely to not enroll</div>
+      </div>
+      <div class="fg">
+        <label>Max scholars on a bus (override)</label>
+        <input id="v-manual-capacity" type="number" value="" min="1" max="200" placeholder="e.g. 70 — overrides fleet table">
+        <div style="font-size:11px;color:var(--text3);margin-top:3px">Leave blank to use per-bus fleet capacities</div>
+      </div>
+    </div>
+  </div>
+
   <div class="card">
     <div class="card-title">Geographic boundaries <span style="font-size:10px;font-weight:400;color:var(--text3)">(optional)</span></div>
     <div class="card-desc">Set hard limits on how far routes can extend in any direction. The optimizer will exclude any family address outside these boundaries and flag them as unserviceable.</div>
@@ -694,13 +775,47 @@ tr:hover td{background:var(--surface3)}
 const STORAGE_KEY = 'bus_optimizer_session_v4';
 const S = {
   school:{name:'',year:'',address:'',arrivalTime:'7:55 AM',director:'',email:''},
-  vendor:{name:'',rateType:'FLAT',dailyRate:800,mileageRate:0,hourlyRate:0,daysPerYear:180,minDays:180,overageRate:0,setupFee:0},
+  vendor:{name:'',rateType:'FLAT',dailyRate:800,mileageRate:0,hourlyRate:0,daysPerYear:180,minDays:180,overageRate:0,setupFee:0,revenuePerStudent:10000,enrollmentRisk:60},
+  fleet:[], // [{name, vendor, capacity, dailyRate, rateType}]
   families:[],
-  communities:[],   // [{name, address, routePriority, type, lat, lon}]
+  communities:[],
   currentRoutes:[],
   routes:[],
   activeRoute:0,
 };
+
+// ── FLEET BUILDER ─────────────────────────────────────────────
+function addFleetRow(bus) {
+  bus = bus || {name:'Bus '+(S.fleet.length+1), vendor:'', capacity:70, dailyRate:800, rateType:'FLAT'};
+  S.fleet.push(bus);
+  renderFleetTable();
+}
+function removeFleetRow(i) {
+  S.fleet.splice(i,1);
+  renderFleetTable();
+  saveSession();
+}
+function renderFleetTable() {
+  var tbody = document.getElementById('fleet-tbody');
+  if (!tbody) return;
+  if (!S.fleet.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="color:var(--text3);text-align:center;padding:14px">No buses added yet — click "+ Add bus" below</td></tr>';
+    return;
+  }
+  tbody.innerHTML = S.fleet.map(function(b,i) {
+    var rateOpts = ['FLAT','MILEAGE','HOURLY','HYBRID'].map(function(r) {
+      return '<option'+(b.rateType===r?' selected':'')+'>'+r+'</option>';
+    }).join('');
+    return '<tr>'
+      +'<td><input style="width:100%;font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:4px" value="'+escHtml(b.name||'')+'" placeholder="e.g. Route A Bus" onchange="S.fleet['+i+'].name=this.value;saveSession()"></td>'
+      +'<td><input style="width:100%;font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:4px" value="'+escHtml(b.vendor||'')+'" placeholder="e.g. FirstStudent" onchange="S.fleet['+i+'].vendor=this.value;saveSession()"></td>'
+      +'<td><input type="number" style="width:80px;font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:4px" value="'+b.capacity+'" min="1" max="200" onchange="S.fleet['+i+'].capacity=parseInt(this.value)||70;saveSession()"></td>'
+      +'<td><input type="number" style="width:90px;font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:4px" value="'+b.dailyRate+'" min="0" onchange="S.fleet['+i+'].dailyRate=parseFloat(this.value)||0;saveSession()"></td>'
+      +'<td><select style="font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:4px" onchange="S.fleet['+i+'].rateType=this.value;saveSession()">'+rateOpts+'</select></td>'
+      +'<td><button class="btn btn-sm" style="padding:3px 8px;font-size:11px;color:var(--red);border-color:var(--red)" onclick="removeFleetRow('+i+')">✕</button></td>'
+      +'</tr>';
+  }).join('');
+}
 let leafletMap = null, mapLayers = [];
 let _cfoText = '';
 const ROUTE_COLORS = ['#2563eb','#0d9488','#d97706','#dc2626','#7c3aed','#0891b2','#65a30d','#db2777'];
@@ -710,7 +825,7 @@ const ROUTE_COLORS = ['#2563eb','#0d9488','#d97706','#dc2626','#7c3aed','#0891b2
 // ══════════════════════════════════════════════════════════════
 function saveSession() {
   try {
-    const snap = {school:S.school,vendor:S.vendor,families:S.families,communities:S.communities,currentRoutes:S.currentRoutes,routes:S.routes,activeRoute:S.activeRoute,savedAt:new Date().toISOString()};
+    const snap = {school:S.school,vendor:S.vendor,fleet:S.fleet,families:S.families,communities:S.communities,currentRoutes:S.currentRoutes,routes:S.routes,activeRoute:S.activeRoute,savedAt:new Date().toISOString()};
     localStorage.setItem(STORAGE_KEY, JSON.stringify(snap));
     const ind = document.getElementById('sb-save-indicator');
     if(ind){ind.style.display='block';ind.classList.add('active');ind.textContent='⬤ Saved '+new Date().toLocaleTimeString();}
@@ -727,6 +842,7 @@ function loadSession() {
     S.communities = snap.communities||[];
     S.currentRoutes = snap.currentRoutes||[];
     S.routes = snap.routes||[];
+    S.fleet = snap.fleet||[];
     S.activeRoute = snap.activeRoute||0;
     return snap;
   } catch(e){ return false; }
@@ -738,6 +854,78 @@ function exportSession() {
   a.href = 'data:application/json;charset=utf-8,'+encodeURIComponent(raw);
   a.download = `bus_session_${(S.school.name||'school').replace(/[^a-z0-9]/gi,'_')}.json`;
   a.click();
+}
+
+// ── SAVE CODE (user-friendly alternative to JSON file) ────────
+function copySaveCode() {
+  saveSession();
+  const raw = localStorage.getItem(STORAGE_KEY)||'{}';
+  try {
+    // Base64-encode with a recognisable prefix so users know what it is
+    const code = 'BRO:' + btoa(unescape(encodeURIComponent(raw)));
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(code).then(function() {
+        toast('Save code copied! Paste it into any doc, note, or email to keep your work.', 'success', 5000);
+      }).catch(function() { fallbackCopy(code); });
+    } else { fallbackCopy(code); }
+  } catch(e) { toast('Could not generate save code: ' + e.message, 'danger'); }
+}
+function fallbackCopy(text) {
+  var ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  try {
+    document.execCommand('copy');
+    toast('Save code copied! Paste it into any doc, note, or email to keep your work.', 'success', 5000);
+  } catch(e) {
+    // Last resort — show in a prompt
+    window.prompt('Copy this save code and paste it somewhere safe:', text);
+  }
+  document.body.removeChild(ta);
+}
+function showPasteSaveCode() {
+  var modal = document.getElementById('paste-code-modal');
+  if (modal) { modal.style.display = 'flex'; }
+}
+function hidePasteSaveCode() {
+  var modal = document.getElementById('paste-code-modal');
+  if (modal) { modal.style.display = 'none'; }
+  var errEl = document.getElementById('paste-code-error');
+  if (errEl) errEl.style.display = 'none';
+}
+function restoreFromCode() {
+  var input = document.getElementById('paste-code-input');
+  var errEl = document.getElementById('paste-code-error');
+  if (!input) return;
+  var code = input.value.trim();
+  if (!code.startsWith('BRO:')) {
+    errEl.textContent = 'This doesn't look like a valid save code. Make sure you copied the whole thing — it should start with BRO:';
+    errEl.style.display = 'block'; return;
+  }
+  try {
+    var json = decodeURIComponent(escape(atob(code.slice(4))));
+    var snap = JSON.parse(json);
+    Object.assign(S.school, snap.school||{});
+    Object.assign(S.vendor, snap.vendor||{});
+    S.families = snap.families||[];
+    S.communities = snap.communities||[];
+    S.currentRoutes = snap.currentRoutes||[];
+    S.routes = snap.routes||[];
+    S.fleet = snap.fleet||[];
+    S.activeRoute = snap.activeRoute||0;
+    localStorage.setItem(STORAGE_KEY, json);
+    restoreFormValues();
+    unlockFromState();
+    updateSidebar();
+    renderFleetTable();
+    hidePasteSaveCode();
+    toast('Work restored successfully from save code!', 'success', 4000);
+  } catch(e) {
+    errEl.textContent = 'Could not read that save code. It may be incomplete or corrupted. Try copying it again.';
+    errEl.style.display = 'block';
+  }
 }
 function importSession(e) {
   const file = e.target.files[0];
@@ -751,11 +939,13 @@ function importSession(e) {
       S.families = snap.families||[];
       S.currentRoutes = snap.currentRoutes||[];
       S.routes = snap.routes||[];
+      S.fleet = snap.fleet||[];
       S.activeRoute = snap.activeRoute||0;
       localStorage.setItem(STORAGE_KEY, ev.target.result);
       restoreFormValues();
       unlockFromState();
       updateSidebar();
+      renderFleetTable();
       toast('Session restored successfully.','success');
     } catch(err){ toast('Could not read that session file — make sure it is a valid .json export.','warn'); }
   };
@@ -781,7 +971,13 @@ function restoreFormValues() {
   set('v-name',v.name); set('v-rate-type',v.rateType); set('v-daily',v.dailyRate);
   set('v-mileage',v.mileageRate); set('v-hourly',v.hourlyRate); set('v-days',v.daysPerYear);
   set('v-min-days',v.minDays); set('v-overage',v.overageRate); set('v-setup-fee',v.setupFee);
+  set('v-revenue-per-student',v.revenuePerStudent||10000);
+  set('v-enrollment-risk',v.enrollmentRisk||60);
+  set('v-deadhead-billed', v.deadheadBilled||'no');
+  set('v-deadhead-rate',   v.deadheadRate||0);
   toggleRateFields();
+  updateDeadheadNote();
+  renderFleetTable();
 }
 
 function unlockFromState() {
@@ -888,12 +1084,36 @@ function toggleRateFields(){
   document.getElementById('vf-hourly').style.display=(rt==='HOURLY')?'':'none';
 }
 function updateRideDisplay(){
-  const rm = parseInt(document.getElementById('v-ride-max').value)||90;
-  const dh = parseInt(document.getElementById('v-deadhead-max').value)||30;
-  const rmEl = document.getElementById('ride-max-display');
-  const tmEl = document.getElementById('total-max-display');
-  if(rmEl) rmEl.textContent = rm;
-  if(tmEl) tmEl.textContent = dh + rm + dh;
+  var rm = parseInt(document.getElementById('v-ride-max').value)||90;
+  var dh = parseInt(document.getElementById('v-deadhead-max').value)||30;
+  var rmEl  = document.getElementById('ride-max-display');
+  var tmEl  = document.getElementById('total-max-display');
+  var dh1El = document.getElementById('dh-display');
+  var dh2El = document.getElementById('dh-display2');
+  if(rmEl)  rmEl.textContent  = rm;
+  if(tmEl)  tmEl.textContent  = dh + rm + dh;
+  if(dh1El) dh1El.textContent = dh;
+  if(dh2El) dh2El.textContent = dh;
+}
+function updateDeadheadNote() {
+  var sel = document.getElementById('v-deadhead-billed');
+  var note = document.getElementById('deadhead-billed-note');
+  var rateRow = document.getElementById('v-deadhead-rate');
+  if (!sel || !note) return;
+  var val = sel.value;
+  if (val === 'no') {
+    note.textContent = '— Deadhead not billed';
+    note.style.color = 'var(--green)';
+    if(rateRow) rateRow.parentElement.style.opacity = '.4';
+  } else if (val === 'yes') {
+    note.textContent = '— Both ways billed';
+    note.style.color = 'var(--amber)';
+    if(rateRow) rateRow.parentElement.style.opacity = '1';
+  } else {
+    note.textContent = '— One-way billed';
+    note.style.color = 'var(--amber)';
+    if(rateRow) rateRow.parentElement.style.opacity = '1';
+  }
 }
 function updateRidershipPreview() {
   var rateEl = document.getElementById('opt-ridership-rate');
@@ -942,11 +1162,19 @@ function saveSetup(){
       deadheadMax:   parseInt(getField('v-deadhead-max','30')) || 30,
       rideMax:       parseInt(getField('v-ride-max','90'))     || 90,
       rideTarget:    parseInt(getField('v-ride-target','60'))  || 60,
+      deadheadBilled: getField('v-deadhead-billed','no'),
+      deadheadRate:  parseFloat(getField('v-deadhead-rate','0')) || 0,
       boundaryNorth: getField('b-north','').trim(),
       boundarySouth: getField('b-south','').trim(),
       boundaryEast:  getField('b-east','').trim(),
       boundaryWest:  getField('b-west','').trim(),
+      revenuePerStudent: parseFloat(getField('v-revenue-per-student','10000')) || 10000,
+      enrollmentRisk:    parseFloat(getField('v-enrollment-risk','60'))        || 60,
     };
+    // Sync fleet row count with number of routes if fleet is empty
+    if (!S.fleet.length && S.routes.length) {
+      S.routes.forEach(function(r,i) { S.fleet.push({name:r.name,vendor:S.vendor.name,capacity:70,dailyRate:S.vendor.dailyRate,rateType:S.vendor.rateType}); });
+    }
     unlock('upload');
     unlock('communities');
     unlock('routes-upload');
@@ -1560,11 +1788,15 @@ function runOptimizer(){
         var v = parser(el.value);
         return isNaN(v) ? fallback : v;
       }
-      var numRoutes   = getVal('opt-routes',    4,    parseInt);
+      // Use fleet bus count as number of routes if fleet is configured
+      var numRoutes = S.fleet.length > 0 ? S.fleet.length : getVal('opt-routes', 4, parseInt);
       var maxWalk     = getVal('opt-walk',       0.25, parseFloat);
       var maxStops    = getVal('opt-stops',      8,    parseInt);
       var maxRadius   = getVal('opt-max-radius', 0,    parseFloat);
-      var maxCapacity = getVal('opt-capacity',   70,   parseInt);
+      // Manual capacity override takes precedence, then fleet average, then field
+      var manualCap = getVal('v-manual-capacity', 0, parseInt);
+      var maxCapacity = manualCap > 0 ? manualCap
+        : (S.fleet.length > 0 ? Math.max.apply(null, S.fleet.map(function(b){return b.capacity||70;})) : getVal('opt-capacity', 70, parseInt));
       var clusterEl   = document.getElementById('opt-cluster-method');
       var clusterMethod = (clusterEl && clusterEl.value) ? clusterEl.value : 'sector';
 
@@ -1606,17 +1838,27 @@ function runOptimizer(){
 
       // Warn if any route exceeds bus capacity (capacity is informational only —
       // you cannot fit more riders on fewer buses than the math allows)
-      if (maxCapacity > 0) {
-        var overCap = S.routes.filter(function(r) { return r.riders.length > maxCapacity; });
-        if (overCap.length) {
-          var minBusesNeeded = Math.ceil(fams.length / maxCapacity);
-          toast(
-            overCap.length + ' route(s) exceed ' + maxCapacity + ' riders. ' +
-            'With ' + fams.length + ' families and a ' + maxCapacity + '-rider cap, ' +
-            'you need at least ' + minBusesNeeded + ' buses. Try increasing "Number of routes" to ' + minBusesNeeded + '.',
-            'warn', 9000
-          );
+      // Per-bus capacity check using fleet if available
+      S.routes.forEach(function(r, ri) {
+        var busCap = S.fleet.length > ri ? (S.fleet[ri].capacity || maxCapacity) : maxCapacity;
+        if (manualCap > 0) busCap = manualCap;
+        r.busCapacity = busCap;
+        // Assign fleet info to route
+        if (S.fleet.length > ri) {
+          r.busName   = S.fleet[ri].name   || r.name;
+          r.busVendor = S.fleet[ri].vendor  || S.vendor.name;
+          r.dailyRate = S.fleet[ri].dailyRate || S.vendor.dailyRate;
+          r.rateType  = S.fleet[ri].rateType  || S.vendor.rateType;
         }
+      });
+      var overCap = S.routes.filter(function(r) { return r.riders.length > (r.busCapacity||maxCapacity); });
+      if (overCap.length) {
+        var minBusesNeeded = Math.ceil(fams.length / maxCapacity);
+        toast(
+          overCap.length + ' route(s) exceed bus capacity. ' +
+          'With ' + fams.length + ' families, you need at least ' + minBusesNeeded + ' buses.',
+          'warn', 9000
+        );
       }
 
       // Anchor critical community stops
@@ -1886,27 +2128,77 @@ function kmeansRoutes(families, k, maxStops, maxWalk) {
   }).filter(Boolean);
 }
 
-function buildStops(families,maxStops,maxWalk){
-  if(!families.length)return[];
-  const n=Math.min(maxStops,families.length);
-  let centers=families.slice(0,n).map(f=>({lat:f.lat,lon:f.lon}));
-  for(let iter=0;iter<15;iter++){
-    const sc=centers.map(()=>[]);
-    families.forEach(f=>{let b=0,bd=Infinity;centers.forEach((c,ci)=>{const d=haversine(f,c);if(d<bd){bd=d;b=ci;}});sc[b].push(f);});
-    const nc=sc.map((cl,ci)=>{if(!cl.length)return centers[ci];return{lat:cl.reduce((s,f)=>s+f.lat,0)/cl.length,lon:cl.reduce((s,f)=>s+f.lon,0)/cl.length};});
-    if(nc.every((c,i)=>Math.abs(c.lat-centers[i].lat)<0.0001))break;
-    centers=nc;
-  }
-  const sc=centers.map(()=>[]);
-  families.forEach(f=>{let b=0,bd=Infinity;centers.forEach((c,ci)=>{const d=haversine(f,c);if(d<bd){bd=d;b=ci;}});sc[b].push(f);});
-  const schoolGeo=roughGeocode(S.school.address||'Seattle WA');
-  const stops=sc.filter(c=>c.length>0).map((c,i)=>{
-    const cx=c.reduce((s,f)=>s+f.lat,0)/c.length,cy=c.reduce((s,f)=>s+f.lon,0)/c.length;
-    let best=c[0],bd=Infinity;c.forEach(f=>{const d=haversine({lat:cx,lon:cy},f);if(d<bd){bd=d;best=f;}});
-    return{id:'s'+i,name:best.address.split(',')[0],address:best.address,lat:cx,lon:cy,riders:c};
+function buildStops(families, maxStops, maxWalk) {
+  if (!families.length) return [];
+  const schoolGeo = roughGeocode(S.school.address || 'Seattle WA');
+
+  // STEP 1: Collect all landmark candidates from critical communities
+  // Prioritise: elementary schools, BGC, community centers, grocery stores, daycares
+  const LANDMARK_PRIORITY = /elementary|middle school|high school|boys.*girls|bgc|community center|rec center|library|grocery|safeway|qfc|daycare|child.*care|kindercare|church|mosque|temple|synagogue|apartment|complex|housing/i;
+  const landmarks = S.communities
+    .filter(function(cc) { return cc.address || (cc.lat && cc.lat !== 47.5); })
+    .map(function(cc) {
+      const priority = LANDMARK_PRIORITY.test(cc.name + ' ' + cc.type) ? 1 : 2;
+      return { id:'lm-'+cc.id, name:cc.name, address:cc.address||cc.name, lat:cc.lat, lon:cc.lon,
+               riders:[], isCriticalCommunity:true, ccType:cc.type, priority:priority };
+    })
+    .sort(function(a,b) { return a.priority - b.priority; });
+
+  // STEP 2: Assign families to their nearest landmark within walking distance
+  var assigned = families.map(function() { return false; });
+  landmarks.forEach(function(lm) {
+    families.forEach(function(f, fi) {
+      if (assigned[fi]) return;
+      if (haversine(f, lm) <= maxWalk) {
+        lm.riders.push(f);
+        assigned[fi] = true;
+      }
+    });
   });
-  stops.sort((a,b)=>haversine(b,schoolGeo)-haversine(a,schoolGeo));
-  return stops;
+
+  // STEP 3: Collect unassigned families and cluster them
+  var unassigned = families.filter(function(f, fi) { return !assigned[fi]; });
+  var clusterStops = [];
+  if (unassigned.length > 0) {
+    var slotsLeft = Math.max(1, maxStops - landmarks.filter(function(lm) { return lm.riders.length > 0; }).length);
+    var n = Math.min(slotsLeft, unassigned.length);
+    var centers = unassigned.slice(0, n).map(function(f) { return {lat:f.lat, lon:f.lon}; });
+    for (var iter = 0; iter < 15; iter++) {
+      var sc = centers.map(function() { return []; });
+      unassigned.forEach(function(f) {
+        var b = 0, bd = Infinity;
+        centers.forEach(function(c, ci) { var d = haversine(f,c); if(d<bd){bd=d;b=ci;} });
+        sc[b].push(f);
+      });
+      var nc = sc.map(function(cl, ci) {
+        if (!cl.length) return centers[ci];
+        return { lat: cl.reduce(function(s,f){return s+f.lat;},0)/cl.length,
+                 lon: cl.reduce(function(s,f){return s+f.lon;},0)/cl.length };
+      });
+      var conv = nc.every(function(c,i) { return Math.abs(c.lat-centers[i].lat)<0.0001; });
+      centers = nc;
+      if (conv) break;
+    }
+    var sc2 = centers.map(function() { return []; });
+    unassigned.forEach(function(f) {
+      var b = 0, bd = Infinity;
+      centers.forEach(function(c, ci) { var d = haversine(f,c); if(d<bd){bd=d;b=ci;} });
+      sc2[b].push(f);
+    });
+    clusterStops = sc2.filter(function(c){return c.length>0;}).map(function(c, i) {
+      var cx = c.reduce(function(s,f){return s+f.lat;},0)/c.length;
+      var cy = c.reduce(function(s,f){return s+f.lon;},0)/c.length;
+      var best = c[0], bd = Infinity;
+      c.forEach(function(f){var d=haversine({lat:cx,lon:cy},f);if(d<bd){bd=d;best=f;}});
+      return {id:'s'+i, name:best.address.split(',')[0], address:best.address, lat:cx, lon:cy, riders:c};
+    });
+  }
+
+  // STEP 4: Merge landmark stops (with riders) + cluster stops, sort farthest-first
+  var activeLandmarks = landmarks.filter(function(lm) { return lm.riders.length > 0; });
+  var allStops = activeLandmarks.concat(clusterStops);
+  allStops.sort(function(a,b) { return haversine(b,schoolGeo) - haversine(a,schoolGeo); });
+  return allStops.slice(0, maxStops);
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -2344,12 +2636,39 @@ function calcCost(r){
   let mi=0;const pts=[...r.stops,{lat:schoolGeo.lat,lon:schoolGeo.lon}];
   for(let i=0;i<pts.length-1;i++)mi+=haversine(pts[i],pts[i+1]);
   const rtMi=mi*2;
+
+  // Use per-bus daily rate if this route has fleet info, else vendor default
+  const dailyRate = r.dailyRate || v.dailyRate;
+  const rateType  = r.rateType  || v.rateType;
+
   let base=0;
-  if(v.rateType==='FLAT')base=v.dailyRate*days;
-  else if(v.rateType==='MILEAGE')base=v.mileageRate*rtMi*days;
-  else if(v.rateType==='HOURLY')base=v.hourlyRate*(mi/12)*2*days;
-  else base=(v.dailyRate+v.mileageRate*rtMi)*days;
-  return{base,total:base,miles:mi,days};
+  if(rateType==='FLAT')base=dailyRate*days;
+  else if(rateType==='MILEAGE')base=(v.mileageRate||0)*rtMi*days;
+  else if(rateType==='HOURLY')base=(v.hourlyRate||0)*(mi/18)*2*days;
+  else base=(dailyRate+(v.mileageRate||0)*rtMi)*days;
+
+  // Deadhead cost — only if vendor charges for it
+  var deadheadCost = 0;
+  var dhBilled = v.deadheadBilled || 'no';
+  if (dhBilled !== 'no') {
+    var dhMins = v.deadheadMax || 30;
+    var dhRate = v.deadheadRate || 0; // $/min
+    var dhTrips = dhBilled === 'partial' ? 1 : 2; // one-way vs both-ways per day
+    if (dhRate > 0) {
+      deadheadCost = dhRate * dhMins * dhTrips * days;
+    } else if (rateType === 'HOURLY' && v.hourlyRate) {
+      // Pro-rate hourly rate for deadhead time
+      deadheadCost = v.hourlyRate * (dhMins/60) * dhTrips * days;
+    } else if (rateType === 'FLAT') {
+      // Estimate deadhead as a proportion of daily rate (deadhead / total bus day)
+      var totalBusDay = dhMins*2 + estimateRouteMinutes(r);
+      var dhProportion = (dhMins * dhTrips) / Math.max(totalBusDay, 1);
+      deadheadCost = dailyRate * dhProportion * days;
+    }
+  }
+
+  const total = base + deadheadCost;
+  return{base, deadheadCost, total, miles:mi, days, dhBilled};
 }
 
 // ── CFO REPORT HTML RENDERER ─────────────────────────────────
@@ -2368,11 +2687,13 @@ function buildCFOHtml(costs, grand, date, ridershipRate, totalRiders, totalFamil
             ? '<span style="color:var(--amber);font-weight:600">'+c.route.estimatedMins+' min</span>'
             : '<span style="color:var(--green)">'+c.route.estimatedMins+' min</span>')
       : '—';
+    var dhNote = c.deadheadCost > 0
+      ? '<div style="font-size:10px;color:#d97706">+'+fmt(c.deadheadCost)+' deadhead</div>' : '';
     return '<tr style="background:'+(i%2?'#f9fafb':'#fff')+'">'
-      +'<td style="padding:8px 12px;border:1px solid #e5e7eb;font-weight:600">'+c.route.name+'</td>'
+      +'<td style="padding:8px 12px;border:1px solid #e5e7eb;font-weight:600">'+c.route.name+(c.route.busVendor&&c.route.busVendor!==v.name?'<div style="font-size:10px;color:#64748b">'+c.route.busVendor+'</div>':'')+'</td>'
       +'<td style="padding:8px 12px;border:1px solid #e5e7eb;text-align:center">'+c.route.stops.length+'</td>'
       +'<td style="padding:8px 12px;border:1px solid #e5e7eb;text-align:center">'+c.route.riders.length+'</td>'
-      +'<td style="padding:8px 12px;border:1px solid #e5e7eb;text-align:right">'+fmt(c.base)+'</td>'
+      +'<td style="padding:8px 12px;border:1px solid #e5e7eb;text-align:right">'+fmt(c.base)+dhNote+'</td>'
       +'<td style="padding:8px 12px;border:1px solid #e5e7eb;text-align:center">'+timeCol+'</td>'
       +'<td style="padding:8px 12px;border:1px solid #e5e7eb;text-align:right;font-weight:600">'+fmt(c.total)+'</td>'
       +'</tr>';
@@ -2422,6 +2743,8 @@ function buildCFOHtml(costs, grand, date, ridershipRate, totalRiders, totalFamil
     + '<div><span style="color:#64748b">Setup / contract fee:</span> '+fmt(v.setupFee)+'</div>'
     + '<div><span style="color:#64748b">Max scholar ride time:</span> '+(v.rideMax||90)+' min</div>'
     + '<div><span style="color:#64748b">Max deadhead each way:</span> '+(v.deadheadMax||30)+' min</div>'
+    + '<div><span style="color:#64748b">Deadhead billing:</span> '+(v.deadheadBilled==='no'?'Not billed':v.deadheadBilled==='partial'?'One-way billed':'Both ways billed')+(v.deadheadRate>0?' @ $'+v.deadheadRate+'/min':'')+'</div>'
+    + (costs.reduce(function(s,c){return s+(c.deadheadCost||0);},0)>0?'<div><span style="color:#64748b">Total deadhead cost:</span> <strong>'+fmt(costs.reduce(function(s,c){return s+(c.deadheadCost||0);},0))+'</strong></div>':'')
     + (v.yardAddress?'<div><span style="color:#64748b">Yard address:</span> '+v.yardAddress+'</div>':'')
     + '</div></div>'
 
@@ -2473,6 +2796,43 @@ function buildCFOHtml(costs, grand, date, ridershipRate, totalRiders, totalFamil
       }).join('')
     + '</div>'
 
+    // Revenue impact section
+    + (function() {
+        var rev = v.revenuePerStudent || 10000;
+        var risk = (v.enrollmentRisk || 60) / 100;
+        var rows = costs.map(function(c) {
+          var ridersAtRisk = c.route.riders.length;
+          var revenueAtRisk = Math.round(ridersAtRisk * risk * rev);
+          var annualBusCost = c.total;
+          var netImpact = revenueAtRisk - annualBusCost;
+          var color = netImpact > 0 ? '#dc2626' : '#16a34a';
+          var label = netImpact > 0 ? 'Revenue loss exceeds bus savings' : 'Bus savings exceed revenue risk';
+          var fmt2 = function(n){ return '$'+Math.round(Math.abs(n)).toLocaleString(); };
+          return '<tr style="background:#fff">'
+            +'<td style="padding:7px 12px;border:1px solid #e5e7eb;font-weight:600">'+c.route.name+'</td>'
+            +'<td style="padding:7px 12px;border:1px solid #e5e7eb;text-align:center">'+ridersAtRisk+'</td>'
+            +'<td style="padding:7px 12px;border:1px solid #e5e7eb;text-align:right;color:#dc2626">'+fmt2(revenueAtRisk)+'</td>'
+            +'<td style="padding:7px 12px;border:1px solid #e5e7eb;text-align:right">'+fmt2(annualBusCost)+'</td>'
+            +'<td style="padding:7px 12px;border:1px solid #e5e7eb;text-align:right;font-weight:700;color:'+color+'">'+fmt2(netImpact)+'</td>'
+            +'<td style="padding:7px 12px;border:1px solid #e5e7eb;font-size:11px;color:'+color+'">'+label+'</td>'
+            +'</tr>';
+        }).join('');
+        return '<div style="margin-bottom:22px">'
+          +'<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.07em;border-bottom:1px solid #e2e8f0;padding-bottom:6px;margin-bottom:10px">Revenue vs. Bus Cost Tradeoff</div>'
+          +'<div style="font-size:12px;color:#475569;margin-bottom:10px">If a route is eliminated and riders don't enroll, the school loses <strong>$'+rev.toLocaleString()+' per student</strong>. At a <strong>'+Math.round(risk*100)+'% enrollment risk</strong>, stopping a route may cost more in lost tuition than it saves in bus expenses.</div>'
+          +'<table style="width:100%;border-collapse:collapse;font-size:12px">'
+          +'<thead><tr style="background:#1a3a5c;color:#fff">'
+          +'<th style="padding:7px 12px;text-align:left">Route</th>'
+          +'<th style="padding:7px 12px;text-align:center">Riders at Risk</th>'
+          +'<th style="padding:7px 12px;text-align:right">Revenue at Risk</th>'
+          +'<th style="padding:7px 12px;text-align:right">Annual Bus Cost</th>'
+          +'<th style="padding:7px 12px;text-align:right">Net Impact if Cut</th>'
+          +'<th style="padding:7px 12px;text-align:left">Recommendation</th>'
+          +'</tr></thead><tbody>'+rows+'</tbody></table>'
+          +'<div style="font-size:11px;color:#94a3b8;margin-top:6px">Revenue at Risk = Riders × Enrollment Risk % × $'+rev.toLocaleString()+'/student. Net Impact = Revenue at Risk − Annual Bus Cost. Negative net = cutting route saves money; positive = keeping route pays off.</div>'
+          +'</div>';
+      })()
+
     // Notes
     + '<div style="background:#f8fafc;border-left:3px solid #1a3a5c;padding:12px 16px;font-size:11px;color:#475569;border-radius:0 6px 6px 0">'
     + '<strong>Assumptions & Notes</strong><br>'
@@ -2512,6 +2872,7 @@ function generateCFO(){
     `EXECUTIVE SUMMARY`,`${'─'.repeat(60)}`,
     `Total Annual Transportation Cost:   ${fmt(grand)}`,
     `  Base contract cost:               ${fmt(costs.reduce((s,c)=>s+c.base,0))}`,
+    `  Deadhead cost:                    ${fmt(costs.reduce((s,c)=>s+(c.deadheadCost||0),0))}${S.vendor.deadheadBilled==='no'?' (not billed)':S.vendor.deadheadBilled==='partial'?' (one-way billed)':' (both ways billed)'}`,
     `  Contract / Setup Fee:             ${fmt(S.vendor.setupFee)}`,
     `Number of Routes:                   ${S.routes.length}`,
     `Families Planned For:               ${totalRiders}${isEstimate?' (estimated — '+ridershipRate+'% of '+totalFamiliesUploaded+' uploaded)':''}`,
@@ -2673,6 +3034,7 @@ function downloadRouteTemplate(){
 // ══════════════════════════════════════════════════════════════
 (function init(){
   toggleRateFields();
+  renderFleetTable();
   const snap=loadSession();
   if(snap&&snap.school&&snap.school.name){
     restoreFormValues();
