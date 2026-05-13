@@ -668,6 +668,17 @@ tr:hover td{background:var(--surface3)}
       </div>
       <div id="pin-search-results" style="margin-top:8px;font-size:12px"></div>
     </div>
+    <div class="card" id="cc-coverage-card" style="display:none">
+      <div class="card-title">⭐ Critical community coverage</div>
+      <div class="alert alert-info" style="margin-bottom:12px"><span class="alert-icon">ℹ</span>
+        Shows whether each critical community has a bus stop within walking distance. Share this with your enrollment director — uncovered communities are recruitment gaps that may need a manual stop added.
+      </div>
+      <div id="cc-coverage-body"></div>
+      <div style="margin-top:10px">
+        <button class="btn btn-sm" onclick="downloadCoverageSummary()">⬇ Download coverage summary</button>
+      </div>
+    </div>
+
     <div class="card">
       <div class="card-title">Route editor — select a route to edit its stops</div>
       <div class="route-tabs" id="editor-tabs"></div>
@@ -2013,6 +2024,7 @@ function runOptimizer(){
       saveSession();
 
       renderUnservedFamilies();
+      renderCCCoverage();
       renderPinnedStopsList();
       updatePinStopSelect();
       statusEl.innerHTML = '<span style="color:var(--green);font-weight:600">✓ ' + S.routes.length + ' routes generated'
@@ -2345,6 +2357,152 @@ function buildStops(families, maxStops, maxWalk) {
 // ══════════════════════════════════════════════════════════════
 // EDITOR
 // ══════════════════════════════════════════════════════════════
+// ── CRITICAL COMMUNITY COVERAGE DASHBOARD ────────────────────
+function renderCCCoverage() {
+  var card = document.getElementById('cc-coverage-card');
+  var body = document.getElementById('cc-coverage-body');
+  if (!card || !body) return;
+
+  if (!S.communities.length) { card.style.display = 'none'; return; }
+  card.style.display = '';
+
+  var maxWalkEl = document.getElementById('opt-walk');
+  var maxWalk = maxWalkEl ? (parseFloat(maxWalkEl.value) || 0.25) : 0.25;
+
+  // For each community, check if any route stop is within walking distance
+  var results = S.communities.map(function(cc) {
+    if (!cc.address && cc.lat === 47.5) {
+      return { cc:cc, covered:false, nearestStop:null, nearestDist:null, nearestRoute:null, reason:'No address entered' };
+    }
+    var bestDist = Infinity, bestStop = null, bestRoute = null;
+    S.routes.forEach(function(r) {
+      r.stops.forEach(function(s) {
+        var d = haversine({lat:cc.lat,lon:cc.lon}, s);
+        if (d < bestDist) { bestDist=d; bestStop=s; bestRoute=r; }
+      });
+    });
+    var covered = bestDist <= maxWalk;
+    return { cc:cc, covered:covered, nearestStop:bestStop, nearestDist:bestDist, nearestRoute:bestRoute, reason:null };
+  });
+
+  var coveredCount = results.filter(function(r){ return r.covered; }).length;
+  var total = results.length;
+  var pct = Math.round(coveredCount/total*100);
+  var barColor = pct===100?'var(--green)':pct>=60?'var(--amber)':'var(--red)';
+
+  body.innerHTML =
+    // Summary bar
+    '<div style="margin-bottom:16px">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+    + '<span style="font-size:13px;font-weight:600">' + coveredCount + ' of ' + total + ' communities covered</span>'
+    + '<span style="font-size:13px;font-weight:700;color:' + barColor + '">' + pct + '%</span>'
+    + '</div>'
+    + '<div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden">'
+    + '<div style="height:100%;width:' + pct + '%;background:' + barColor + ';border-radius:4px;transition:width .4s"></div>'
+    + '</div>'
+    + (pct < 100
+        ? '<div style="font-size:11px;color:var(--red);margin-top:5px">⚠ ' + (total-coveredCount) + ' uncovered — consider adding a manual stop or adjusting the walk distance threshold.</div>'
+        : '<div style="font-size:11px;color:var(--green);margin-top:5px">✓ All critical communities have a stop within walking distance.</div>')
+    + '</div>'
+
+    // Community list
+    + '<div style="display:grid;gap:8px">'
+    + results.map(function(res) {
+        var cc = res.cc;
+        var icon = res.covered ? '✓' : (res.reason ? '?' : '✗');
+        var bg   = res.covered ? 'var(--green-light)' : (res.reason ? 'var(--amber-light)' : 'var(--red-light)');
+        var border = res.covered ? '#bbf7d0' : (res.reason ? '#fde68a' : '#fecaca');
+        var textColor = res.covered ? '#15803d' : (res.reason ? '#92400e' : '#b91c1c');
+        var detail = res.reason
+          ? '<span style="color:var(--amber)">' + res.reason + ' — add address in Step 3</span>'
+          : res.covered
+            ? 'Served by <strong>' + res.nearestRoute.name + '</strong> → ' + res.nearestStop.name
+              + ' <span style="color:var(--text3)">(' + (res.nearestDist*5280).toFixed(0) + ' ft away)</span>'
+            : 'Nearest stop: ' + (res.nearestStop ? res.nearestStop.name + ' on ' + res.nearestRoute.name
+              + ' <strong style="color:var(--red)">(' + res.nearestDist.toFixed(2) + ' mi — outside walk zone)</strong>'
+              : 'No stops generated yet');
+        var addStopBtn = !res.covered && !res.reason
+          ? '<button class="btn btn-sm" style="padding:3px 10px;font-size:11px;margin-left:auto;flex-shrink:0" onclick="addCommunityAsStop('' + cc.id + '')">+ Add stop here</button>'
+          : '';
+        return '<div style="background:' + bg + ';border:1px solid ' + border + ';border-radius:var(--r2);padding:10px 14px;display:flex;align-items:flex-start;gap:10px">'
+          + '<div style="width:22px;height:22px;border-radius:50%;background:' + textColor + ';color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0">' + icon + '</div>'
+          + '<div style="flex:1">'
+          + '<div style="font-weight:600;font-size:13px;color:' + textColor + '">' + escHtml(cc.name) + (cc.type&&cc.type!=='Other'?' <span style="font-size:10px;font-weight:400;opacity:.7">'+cc.type+'</span>':'') + '</div>'
+          + '<div style="font-size:11px;color:var(--text2);margin-top:2px">' + (cc.address||'No address') + '</div>'
+          + '<div style="font-size:12px;margin-top:4px">' + detail + '</div>'
+          + '</div>'
+          + addStopBtn
+          + '</div>';
+      }).join('')
+    + '</div>';
+}
+
+function addCommunityAsStop(ccId) {
+  var cc = S.communities.find(function(c){ return c.id === ccId; });
+  if (!cc || !S.routes.length) return;
+
+  // Find the route whose center is closest to this community
+  var bestRoute = S.routes[0], bd = Infinity;
+  S.routes.forEach(function(r) {
+    if (!r.stops.length) return;
+    var cx = r.stops.reduce(function(s,st){return s+st.lat;},0)/r.stops.length;
+    var cy = r.stops.reduce(function(s,st){return s+st.lon;},0)/r.stops.length;
+    var d = haversine({lat:cc.lat,lon:cc.lon},{lat:cx,lon:cy});
+    if (d < bd) { bd=d; bestRoute=r; }
+  });
+
+  var newStop = {
+    id: 'cc-manual-'+cc.id,
+    name: cc.name,
+    address: cc.address || cc.name,
+    lat: cc.lat, lon: cc.lon,
+    riders: [],
+    isCriticalCommunity: true,
+    ccType: cc.type
+  };
+
+  // Insert in distance-from-school order
+  var schoolGeo = roughGeocode(S.school.address||'Seattle WA');
+  var dist = haversine({lat:cc.lat,lon:cc.lon}, schoolGeo);
+  var inserted = false;
+  for (var i=0; i<bestRoute.stops.length; i++) {
+    if (dist >= haversine(bestRoute.stops[i], schoolGeo)) {
+      bestRoute.stops.splice(i, 0, newStop);
+      inserted = true; break;
+    }
+  }
+  if (!inserted) bestRoute.stops.push(newStop);
+
+  saveSession();
+  renderCCCoverage();
+  renderEditor();
+  toast(cc.name + ' added as a stop on ' + bestRoute.name + '.', 'success');
+}
+
+function downloadCoverageSummary() {
+  if (!S.communities.length || !S.routes.length) { toast('Run the optimizer first.','warn'); return; }
+  var maxWalkEl = document.getElementById('opt-walk');
+  var maxWalk = maxWalkEl ? (parseFloat(maxWalkEl.value)||0.25) : 0.25;
+  var rows = [['Community Name','Type','Address','Covered?','Nearest Stop','Route','Distance (mi)','Walk Distance Threshold (mi)']];
+  S.communities.forEach(function(cc) {
+    var bestDist=Infinity, bestStop=null, bestRoute=null;
+    S.routes.forEach(function(r){r.stops.forEach(function(s){var d=haversine({lat:cc.lat,lon:cc.lon},s);if(d<bestDist){bestDist=d;bestStop=s;bestRoute=r;}});});
+    rows.push([
+      cc.name, cc.type||'', cc.address||'',
+      (!cc.address&&cc.lat===47.5)?'No address':bestDist<=maxWalk?'YES':'NO',
+      bestStop?bestStop.name:'', bestRoute?bestRoute.name:'',
+      bestDist===Infinity?'':bestDist.toFixed(2), maxWalk
+    ]);
+  });
+  var csv = rows.map(function(r){return r.map(function(c){return '"'+String(c).replace(/"/g,'""')+'"';}).join(',');}).join('
+');
+  var a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download = 'critical_community_coverage_'+(S.school.name||'school').replace(/[^a-z0-9]/gi,'_')+'.csv';
+  a.click();
+  toast('Coverage summary downloaded.','success');
+}
+
 // ── UNSERVED FAMILIES ────────────────────────────────────────
 function renderUnservedFamilies() {
   var card = document.getElementById('unserved-card');
