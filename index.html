@@ -348,7 +348,7 @@ tr:hover td{background:var(--surface3)}
   <div class="ph">
     <div class="ph-eyebrow">Step 2 of 8</div>
     <div class="ph-title">Upload family addresses</div>
-    <div class="ph-desc">Paste a Google Sheets or Google Doc link for new applicant families and/or current enrolled students. The address column will be auto-detected.</div>
+    <div class="ph-desc">Upload your new applicant family addresses. The optimizer will use your current routes (Step 4) to anchor existing stops before adjusting for new families.</div>
   </div>
   <div class="card">
     <div class="card-title">New applicant families</div>
@@ -378,34 +378,7 @@ tr:hover td{background:var(--surface3)}
     <div style="font-size:11px;color:var(--text3);margin-top:5px">Make sure sharing is set to <strong>"Anyone with the link can view."</strong></div>
     <div id="new-preview" style="margin-top:12px"></div>
   </div>
-  <div class="card">
-    <div class="card-title">Current enrolled students</div>
-    <div class="alert alert-info" style="margin-bottom:14px"><span class="alert-icon">ℹ</span>
-      Optional — helps weight stops toward existing riders. Upload a <strong>PDF</strong>, <strong>Word doc (.docx)</strong>, or <strong>CSV</strong> — or paste a <strong>Google Doc / Sheets link</strong>.
-    </div>
-    <div class="upload-zone" id="uz-cur"
-      onclick="document.getElementById('fi-cur').click()"
-      ondragover="dzOver(event,'uz-cur')"
-      ondragleave="dzLeave('uz-cur')"
-      ondrop="dzDrop(event,'cur')">
-      <div class="uz-icon">📄</div>
-      <div class="uz-title">Drop file here or click to browse</div>
-      <div class="uz-sub">PDF, Word (.docx), or CSV with student addresses</div>
-      <div class="fmt-pills">
-        <span class="fmt-pill">PDF</span>
-        <span class="fmt-pill">DOCX</span>
-        <span class="fmt-pill">CSV</span>
-      </div>
-    </div>
-    <input type="file" id="fi-cur" accept=".csv,.txt,.pdf,.docx,.doc" style="display:none" onchange="handleFileUpload(event,'cur')">
-    <div style="margin-top:14px;font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">Or paste a Google Doc / Sheets link</div>
-    <div class="url-row">
-      <input type="url" id="url-cur" placeholder="https://docs.google.com/…">
-      <button class="btn btn-primary btn-sm" onclick="loadFromUrl('cur')">Load</button>
-    </div>
-    <div style="font-size:11px;color:var(--text3);margin-top:5px">Make sure sharing is set to <strong>"Anyone with the link can view."</strong></div>
-    <div id="cur-preview" style="margin-top:12px"></div>
-  </div>
+
   <div class="btn-group">
     <button class="btn" onclick="go('setup')">← Back</button>
     <button class="btn btn-primary" id="btn-upload-next" onclick="go('communities')" disabled>Continue →</button>
@@ -612,6 +585,20 @@ tr:hover td{background:var(--surface3)}
         <label>Avg bus speed (mph)</label>
         <input id="opt-speed" type="number" value="18" min="8" max="40">
         <div style="font-size:11px;color:var(--text3);margin-top:3px">Used to estimate ride times. Urban: 15–18 mph. Suburban: 20–25 mph.</div>
+      </div>
+    </div>
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r2);padding:14px 16px;margin-top:8px">
+      <div style="display:flex;align-items:flex-start;gap:12px">
+        <input type="checkbox" id="opt-anchor-current" style="margin-top:3px;width:16px;height:16px;flex-shrink:0;accent-color:var(--teal)" checked>
+        <div>
+          <label for="opt-anchor-current" style="font-size:13px;font-weight:600;color:var(--text);cursor:pointer">Anchor existing route stops before adding new ones</label>
+          <div style="font-size:12px;color:var(--text2);margin-top:4px;line-height:1.6">
+            When checked, the optimizer treats your current route stops (uploaded in Step 4) as locked anchors. 
+            Existing stops are preserved first, then new family addresses are clustered around them. 
+            <strong>Recommended</strong> — ensures current riders keep their stops while accommodating new families.
+          </div>
+          <div id="anchor-status" style="font-size:11px;color:var(--text3);margin-top:6px"></div>
+        </div>
       </div>
     </div>
     <div class="btn-group" style="margin-top:12px">
@@ -1105,7 +1092,7 @@ function go(id) {
     if(id==='map') try{ renderMap(); }catch(e){ console.warn('renderMap error:',e); }
     if(id==='maps-out') try{ renderMapsOut(); }catch(e){ console.warn('renderMapsOut error:',e); }
     if(id==='communities') try{ renderCommunitiesList(); }catch(e){ console.warn('renderCommunitiesList error:',e); }
-    if(id==='optimize') try{ updateRidershipPreview(); }catch(e){}
+    if(id==='optimize') try{ updateRidershipPreview(); updateAnchorStatus(); }catch(e){}
     try{ maybeShowSaveReminder(id); }catch(e){}
   } catch(err) {
     console.error('go() error:', err);
@@ -1191,6 +1178,19 @@ function resetReminderTimer() {
 function maybeShowSaveReminder(panelId) {
   if (['family','cfo','maps-out'].includes(panelId)) {
     setTimeout(showSaveReminder, 1500);
+  }
+}
+
+function updateAnchorStatus() {
+  var el = document.getElementById('anchor-status');
+  if (!el) return;
+  var checked = document.getElementById('opt-anchor-current');
+  if (!checked || !checked.checked) { el.textContent = ''; return; }
+  if (!S.currentRoutes.length) {
+    el.innerHTML = '<span style="color:var(--amber)">⚠ No current routes uploaded — upload in Step 4 to use this feature, or uncheck to cluster from scratch.</span>';
+  } else {
+    var totalStops = S.currentRoutes.reduce(function(s,r){return s+r.stops.length;},0);
+    el.innerHTML = '<span style="color:var(--teal)">✓ Will anchor ' + totalStops + ' existing stops across ' + S.currentRoutes.length + ' routes before clustering new families.</span>';
   }
 }
 
@@ -1932,10 +1932,19 @@ function runOptimizer(){
         if (!fams.some(function(f){ return f.id === pf.id; })) fams.push(pf);
       });
 
-      // Run clustering — always produces exactly numRoutes routes
-      S.routes = (clusterMethod === 'sector')
-        ? sectorRoutes(fams, numRoutes, maxStops, maxWalk)
-        : kmeansRoutes(fams, numRoutes, maxStops, maxWalk);
+      // Check anchor toggle
+      var anchorEl = document.getElementById('opt-anchor-current');
+      var anchorCurrent = anchorEl && anchorEl.checked && S.currentRoutes.length > 0;
+
+      if (anchorCurrent) {
+        // ANCHOR MODE: lock existing stops, cluster remaining families around them
+        S.routes = anchorAndCluster(fams, numRoutes, maxStops, maxWalk);
+      } else {
+        // FRESH MODE: cluster all families from scratch
+        S.routes = (clusterMethod === 'sector')
+          ? sectorRoutes(fams, numRoutes, maxStops, maxWalk)
+          : kmeansRoutes(fams, numRoutes, maxStops, maxWalk);
+      }
 
       // Warn if any route exceeds bus capacity (capacity is informational only —
       // you cannot fit more riders on fewer buses than the math allows)
@@ -2164,6 +2173,111 @@ function injectCommunityStops(maxWalk) {
     }
     if (!inserted) targetRoute.stops.push(newStop);
   });
+}
+
+// ── ANCHOR + CLUSTER ─────────────────────────────────────────────────────────
+// Preserves current route stops as anchors, then clusters remaining new families
+// around them. Existing riders keep their stops; new families get assigned to
+// the nearest anchor or a new stop if they're too far from any existing one.
+function anchorAndCluster(families, k, maxStops, maxWalk) {
+  if (!S.currentRoutes.length) {
+    // No current routes — fall back to sector clustering
+    return sectorRoutes(families, k, maxStops, maxWalk);
+  }
+
+  var schoolGeo = roughGeocode(S.school.address || 'Seattle WA');
+
+  // Build anchored routes from current routes (up to k routes)
+  var anchoredRoutes = S.currentRoutes.slice(0, k).map(function(cr, i) {
+    // Geocode existing stops
+    var anchoredStops = cr.stops.map(function(s) {
+      var geo = roughGeocode(s.address);
+      return {
+        id: 'anchor-' + s.address.replace(/\W/g,'').slice(0,8) + i,
+        name: s.name || s.address.split(',')[0],
+        address: s.address,
+        lat: geo.lat, lon: geo.lon,
+        riders: [],
+        isAnchored: true
+      };
+    });
+    return {
+      id: 'r' + i,
+      name: cr.name || ('Route ' + (i+1)),
+      color: ROUTE_COLORS[i % ROUTE_COLORS.length],
+      stops: anchoredStops,
+      riders: []
+    };
+  });
+
+  // If fewer current routes than k, add empty new routes
+  while (anchoredRoutes.length < k) {
+    var idx = anchoredRoutes.length;
+    anchoredRoutes.push({
+      id: 'r' + idx,
+      name: 'Route ' + (idx+1),
+      color: ROUTE_COLORS[idx % ROUTE_COLORS.length],
+      stops: [],
+      riders: []
+    });
+  }
+
+  // Assign each family to the nearest anchored stop within walking distance,
+  // or to the nearest route if no stop is close enough
+  var assigned = [];
+  families.forEach(function(f) {
+    var bestStop = null, bestRoute = null, bestDist = Infinity;
+    anchoredRoutes.forEach(function(r) {
+      r.stops.forEach(function(s) {
+        var d = haversine(f, s);
+        if (d < bestDist) { bestDist = d; bestStop = s; bestRoute = r; }
+      });
+    });
+    if (bestStop && bestDist <= maxWalk) {
+      // Family is within walking distance of an existing stop
+      bestStop.riders.push(f);
+      bestRoute.riders.push(f);
+      assigned.push(f.id);
+    }
+  });
+
+  // Remaining unassigned families — cluster them and add new stops
+  var unassigned = families.filter(function(f) { return assigned.indexOf(f.id) < 0; });
+  if (unassigned.length > 0) {
+    // Distribute unassigned families across routes by proximity to route center
+    unassigned.forEach(function(f) {
+      var bestRoute = anchoredRoutes[0], bestDist = Infinity;
+      anchoredRoutes.forEach(function(r) {
+        // Use centroid of existing stops as route center
+        if (!r.stops.length) {
+          var d = haversine(f, schoolGeo);
+          if (d < bestDist) { bestDist = d; bestRoute = r; }
+          return;
+        }
+        var cx = r.stops.reduce(function(s,st){return s+st.lat;},0)/r.stops.length;
+        var cy = r.stops.reduce(function(s,st){return s+st.lon;},0)/r.stops.length;
+        var d = haversine(f, {lat:cx, lon:cy});
+        if (d < bestDist) { bestDist = d; bestRoute = r; }
+      });
+      bestRoute.riders.push(f);
+    });
+
+    // For each route with unassigned riders, add new clustered stops
+    anchoredRoutes.forEach(function(r) {
+      var newFamilies = r.riders.filter(function(f) { return assigned.indexOf(f.id) < 0; });
+      if (!newFamilies.length) return;
+      var slotsLeft = Math.max(1, maxStops - r.stops.filter(function(s){return s.isAnchored;}).length);
+      var newStops = buildStops(newFamilies, slotsLeft, maxWalk);
+      newStops.forEach(function(s) { r.stops.push(s); });
+    });
+  }
+
+  // Sort stops farthest-first from school
+  anchoredRoutes.forEach(function(r) {
+    r.stops.sort(function(a,b) { return haversine(b,schoolGeo) - haversine(a,schoolGeo); });
+  });
+
+  return anchoredRoutes.filter(function(r) { return r.stops.length > 0; });
 }
 
 // ── CLUSTERING ───────────────────────────────────────────────────────────────
