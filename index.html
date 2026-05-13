@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -141,6 +142,8 @@ tr:hover td{background:var(--surface3)}
 .sticky-save{position:sticky;bottom:0;background:rgba(255,255,255,.97);border-top:1px solid var(--border);padding:10px 0;margin-top:20px;display:flex;align-items:center;gap:10px;backdrop-filter:blur(4px);z-index:100}
 .sticky-save .save-indicator{font-size:12px;color:var(--text3);font-family:var(--font-mono)}
 .sticky-save .save-indicator.saved{color:var(--teal)}
+.save-reminder{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1a3a5c;color:#fff;border-radius:10px;padding:12px 20px;font-size:13px;display:flex;align-items:center;gap:12px;box-shadow:0 4px 20px rgba(0,0,0,.25);z-index:8888;animation:slideUp .3s ease}
+@keyframes slideUp{from{opacity:0;transform:translateX(-50%) translateY(12px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 @media print{
   .sidebar,.btn-group,.session-banner,.route-tabs,.alert,.card-title{display:none!important}
   .main{background:#fff}
@@ -745,6 +748,13 @@ tr:hover td{background:var(--surface3)}
 </main>
 </div>
 
+<!-- Save reminder banner -->
+<div id="save-reminder" style="display:none" class="save-reminder">
+  💾 <span>Don't forget to save your work!</span>
+  <button onclick="copySaveCode();hideSaveReminder()" style="background:#2563eb;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;font-weight:600">Copy save code</button>
+  <button onclick="hideSaveReminder()" style="background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer">Dismiss</button>
+</div>
+
 <!-- External libs: loaded dynamically so a CDN failure never blocks the app -->
 <script>
 (function(){
@@ -1059,6 +1069,7 @@ function go(id) {
     if(id==='maps-out') try{ renderMapsOut(); }catch(e){ console.warn('renderMapsOut error:',e); }
     if(id==='communities') try{ renderCommunitiesList(); }catch(e){ console.warn('renderCommunitiesList error:',e); }
     if(id==='optimize') try{ updateRidershipPreview(); }catch(e){}
+    try{ maybeShowSaveReminder(id); }catch(e){}
   } catch(err) {
     console.error('go() error:', err);
   }
@@ -1115,6 +1126,37 @@ function updateDeadheadNote() {
     if(rateRow) rateRow.parentElement.style.opacity = '1';
   }
 }
+// ── SAVE REMINDER ────────────────────────────────────────────
+var _reminderTimer = null;
+var _reminderDismissed = false;
+
+function showSaveReminder() {
+  if (_reminderDismissed) return;
+  var el = document.getElementById('save-reminder');
+  if (el) el.style.display = 'flex';
+}
+function hideSaveReminder() {
+  _reminderDismissed = true;
+  var el = document.getElementById('save-reminder');
+  if (el) el.style.display = 'none';
+  // Reset dismissed flag after 10 minutes so it can show again
+  setTimeout(function(){ _reminderDismissed = false; }, 10*60*1000);
+}
+function resetReminderTimer() {
+  clearTimeout(_reminderTimer);
+  _reminderTimer = setTimeout(showSaveReminder, 2*60*1000); // 2 min inactivity
+}
+// Start reminder timer on user activity
+['click','keydown','scroll'].forEach(function(ev){
+  document.addEventListener(ev, resetReminderTimer, {passive:true});
+});
+// Always show reminder when navigating to output steps
+function maybeShowSaveReminder(panelId) {
+  if (['family','cfo','maps-out'].includes(panelId)) {
+    setTimeout(showSaveReminder, 1500);
+  }
+}
+
 function updateRidershipPreview() {
   var rateEl = document.getElementById('opt-ridership-rate');
   var previewEl = document.getElementById('ridership-preview');
@@ -2672,10 +2714,11 @@ function calcCost(r){
 }
 
 // ── CFO REPORT HTML RENDERER ─────────────────────────────────
-function buildCFOHtml(costs, grand, date, ridershipRate, totalRiders, totalFamiliesUploaded) {
+function buildCFOHtml(costs, grand, date, ridershipRate, totalRiders, totalFamiliesUploaded, snapshotId) {
   ridershipRate = ridershipRate || 100;
   totalRiders = totalRiders || S.routes.reduce(function(s,r){return s+r.riders.length;},0);
   totalFamiliesUploaded = totalFamiliesUploaded || S.families.length;
+  snapshotId = snapshotId || '—';
   var isEstimate = ridershipRate < 100;
   const v = S.vendor, fmt = n => '$' + Math.round(n).toLocaleString();
   const dh = v.deadheadMax || 30;
@@ -2710,7 +2753,9 @@ function buildCFOHtml(costs, grand, date, ridershipRate, totalRiders, totalFamil
     + '<div><div style="font-size:20px;font-weight:700;color:#1a3a5c">'+(S.school.name||'School')+'</div>'
     + '<div style="font-size:13px;color:#475569;margin-top:2px">CFO Transportation Cost Report &mdash; '+(S.school.year||'')+'</div></div>'
     + '<div style="text-align:right;font-size:11px;color:#888"><div>'+date+'</div>'
-    + '<div>'+( S.school.director||'')+'</div><div>'+(S.school.email||'')+'</div></div>'
+    + '<div>'+(S.school.director||'')+'</div><div>'+(S.school.email||'')+'</div>'
+    + '<div style="margin-top:6px;font-family:monospace;font-size:10px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:4px;padding:3px 7px;color:#475569;letter-spacing:.03em">📋 Snapshot: '+snapshotId+'</div>'
+    + '</div>'
     + '</div>'
 
     // Ridership context banner
@@ -2853,6 +2898,13 @@ function generateCFO(){
   const totalFamiliesUploaded=S.families.length;
   const fmt=n=>'$'+Math.round(n).toLocaleString();
   const date=new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+  const dateISO=new Date().toISOString().slice(0,10);
+
+  // Generate snapshot ID — uniquely identifies this report version
+  const initials=(S.school.name||'SCH').split(/\s+/).map(w=>w[0]||'').join('').toUpperCase().slice(0,4);
+  const dataStr=JSON.stringify({routes:S.routes.length,families:S.families.length,vendor:S.vendor.name,date:dateISO});
+  let hash=0;for(let i=0;i<dataStr.length;i++){hash=((hash<<5)-hash)+dataStr.charCodeAt(i);hash|=0;}
+  const snapshotId='IPS-'+initials+'-'+dateISO+'-'+Math.abs(hash).toString(36).toUpperCase().slice(0,6);
 
   // Ridership context
   const ridershipRate = getVal('opt-ridership-rate', 100, parseFloat);
@@ -2864,7 +2916,8 @@ function generateCFO(){
   _cfoText=[
     `CFO TRANSPORTATION COST REPORT`,`${'═'.repeat(60)}`,
     `School:          ${S.school.name||'—'}`,`School Year:     ${S.school.year||'—'}`,
-    `Director:        ${S.school.director||'—'} (${S.school.email||'—'})`,`Generated:       ${date}`,``,
+    `Director:        ${S.school.director||'—'} (${S.school.email||'—'})`,`Generated:       ${date}`,
+    `Snapshot ID:     ${snapshotId}`,``,
     isEstimate ? `⚠ PLANNING ESTIMATE — NOT FINAL` : `STATUS: Full Family List`,
     isEstimate ? `This report uses an estimated ${ridershipRate}% ridership rate applied to ${totalFamiliesUploaded} uploaded` : '',
     isEstimate ? `families, projecting ${totalRiders} riders. Actual costs will vary based on true opt-in data.` : '',
@@ -2902,7 +2955,7 @@ function generateCFO(){
   ].filter(l=>l!=='').join('\n');
 
   // Render HTML preview
-  const cfoHtml = buildCFOHtml(costs, grand, date, ridershipRate, totalRiders, totalFamiliesUploaded);
+  const cfoHtml = buildCFOHtml(costs, grand, date, ridershipRate, totalRiders, totalFamiliesUploaded, snapshotId);
   document.getElementById('cfo-preview-card').style.display='';
   document.getElementById('cfo-text').innerHTML = cfoHtml;
   document.getElementById('btn-dl-docx').style.display='';
