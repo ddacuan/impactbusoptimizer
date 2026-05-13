@@ -647,6 +647,27 @@ tr:hover td{background:var(--surface3)}
   <div id="opt-results" style="display:none">
     <div class="alert alert-warn" id="time-warning-banner" style="display:none;margin-bottom:12px"></div>
     <div class="metrics" id="opt-metrics"></div>
+    <div class="card" id="pinned-stops-card">
+      <div class="card-title">📍 Pinned stops — assign specific families to specific stops</div>
+      <div class="alert alert-info" style="margin-bottom:12px"><span class="alert-icon">ℹ</span>
+        Pin a family to a stop when they need a specific location (e.g. a Boys &amp; Girls Club for childcare, or a specific apartment complex). Pinned families are always assigned to that stop and won't be moved when you re-run the optimizer.
+      </div>
+      <div id="pinned-stops-body">
+        <div style="font-size:13px;color:var(--text3)">No families pinned yet. Use the search below to find a family and pin them to a stop.</div>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+        <div class="fg" style="flex:1;min-width:200px;margin:0">
+          <label>Search family by name or address</label>
+          <input type="text" id="pin-family-search" placeholder="e.g. Smith or 123 Main St" oninput="renderPinSearch()">
+        </div>
+        <div class="fg" style="flex:1;min-width:200px;margin:0">
+          <label>Pin to stop</label>
+          <select id="pin-stop-select"><option value="">— select a stop —</option></select>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="addPin()">Pin family</button>
+      </div>
+      <div id="pin-search-results" style="margin-top:8px;font-size:12px"></div>
+    </div>
     <div class="card">
       <div class="card-title">Route editor — select a route to edit its stops</div>
       <div class="route-tabs" id="editor-tabs"></div>
@@ -655,6 +676,22 @@ tr:hover td{background:var(--surface3)}
     <div class="card" id="changes-card" style="display:none">
       <div class="card-title">Changes vs. current routes</div>
       <div id="changes-body"></div>
+    </div>
+    <div class="card" id="unserved-card" style="display:none">
+      <div class="card-title" style="color:var(--red)">⚠ Unserved families (<span id="unserved-count">0</span>)</div>
+      <div class="alert alert-warn" style="margin-bottom:12px"><span class="alert-icon">⚠</span>
+        These families were excluded from all routes — either they're outside the radius limit, their address couldn't be geocoded, or they were filtered by boundaries. <strong>Follow up with each family directly</strong> — they may not enroll if they can't get a bus.
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Name</th><th>Address</th><th>Reason excluded</th><th>Distance from school</th></tr></thead>
+          <tbody id="unserved-tbody"></tbody>
+        </table>
+      </div>
+      <div style="margin-top:10px;display:flex;gap:8px">
+        <button class="btn btn-sm" onclick="downloadUnservedCSV()">⬇ Download as CSV</button>
+        <span style="font-size:11px;color:var(--text3);align-self:center">Share this list with your outreach team for follow-up</span>
+      </div>
     </div>
     <div class="btn-group">
       <button class="btn btn-primary" onclick="go('map')">View on map →</button>
@@ -792,6 +829,8 @@ const S = {
   currentRoutes:[],
   routes:[],
   activeRoute:0,
+  unservedFamilies:[],  // families excluded from all routes
+  pinnedStops:[],       // [{familyId, familyName, familyAddress, stopId, stopName, routeName}]
 };
 
 // ── FLEET BUILDER ─────────────────────────────────────────────
@@ -835,7 +874,7 @@ const ROUTE_COLORS = ['#2563eb','#0d9488','#d97706','#dc2626','#7c3aed','#0891b2
 // ══════════════════════════════════════════════════════════════
 function saveSession() {
   try {
-    const snap = {school:S.school,vendor:S.vendor,fleet:S.fleet,families:S.families,communities:S.communities,currentRoutes:S.currentRoutes,routes:S.routes,activeRoute:S.activeRoute,savedAt:new Date().toISOString()};
+    const snap = {school:S.school,vendor:S.vendor,fleet:S.fleet,families:S.families,communities:S.communities,currentRoutes:S.currentRoutes,routes:S.routes,activeRoute:S.activeRoute,pinnedStops:S.pinnedStops,savedAt:new Date().toISOString()};
     localStorage.setItem(STORAGE_KEY, JSON.stringify(snap));
     const ind = document.getElementById('sb-save-indicator');
     if(ind){ind.style.display='block';ind.classList.add('active');ind.textContent='⬤ Saved '+new Date().toLocaleTimeString();}
@@ -853,6 +892,7 @@ function loadSession() {
     S.currentRoutes = snap.currentRoutes||[];
     S.routes = snap.routes||[];
     S.fleet = snap.fleet||[];
+    S.pinnedStops = snap.pinnedStops||[];
     S.activeRoute = snap.activeRoute||0;
     return snap;
   } catch(e){ return false; }
@@ -924,6 +964,7 @@ function restoreFromCode() {
     S.currentRoutes = snap.currentRoutes||[];
     S.routes = snap.routes||[];
     S.fleet = snap.fleet||[];
+    S.pinnedStops = snap.pinnedStops||[];
     S.activeRoute = snap.activeRoute||0;
     localStorage.setItem(STORAGE_KEY, json);
     restoreFormValues();
@@ -1501,12 +1542,13 @@ function showUploadPreview(type,parsed,filename){
     <div class="alert alert-success" style="margin-bottom:10px"><span class="alert-icon">✓</span>
       <strong>${parsed.length} addresses</strong> loaded from "${filename}". ${geocodedOk} geocoded to known locations.
     </div>
-    <div class="tbl-wrap"><table><thead><tr><th>Name</th><th>Address</th><th>Grade</th><th>Geocoded</th></tr></thead>
+    <div class="tbl-wrap"><table><thead><tr><th>Name</th><th>Address</th><th>Grade</th><th>Geocoded</th><th>Pin to stop</th></tr></thead>
     <tbody>${parsed.slice(0,6).map(p=>`<tr>
       <td>${p.name||'—'}</td><td style="font-size:11px">${p.address}</td><td>${p.grade||'—'}</td>
       <td>${p.lat!==47.606?'<span class="badge badge-green">✓</span>':'<span class="badge badge-amber">est.</span>'}</td>
+      <td style="font-size:11px;color:var(--text3)">Set after optimizing →</td>
     </tr>`).join('')}
-    ${parsed.length>6?`<tr><td colspan="4" style="color:var(--text3);text-align:center">… and ${parsed.length-6} more</td></tr>`:''}</tbody></table></div>`;
+    ${parsed.length>6?`<tr><td colspan="5" style="color:var(--text3);text-align:center">… and ${parsed.length-6} more. After running the optimizer, use the Pinned Stops tab to assign families to specific stops.</td></tr>`:''}</tbody></table></div>`;
 }
 function showAlert(containerId,msg,type='info'){
   const icons={info:'ℹ',success:'✓',warn:'⚠',danger:'✕'};
@@ -1851,8 +1893,20 @@ function runOptimizer(){
         return true;
       });
 
-      var excluded = S.families.length - fams.length;
-      if(excluded > 0) toast(excluded + ' address(es) excluded by radius limit.', 'warn', 4000);
+      // Track unserved families with reason
+      S.unservedFamilies = S.families.filter(function(f){
+        if(!f.lat || !f.lon) {
+          f.excludeReason = 'Address could not be geocoded';
+          return true;
+        }
+        if(maxRadius > 0 && haversine(f, schoolGeo) > maxRadius) {
+          f.excludeReason = 'Beyond ' + maxRadius + ' mi radius limit';
+          return true;
+        }
+        return false;
+      });
+      var excluded = S.unservedFamilies.length;
+      if(excluded > 0) toast(excluded + ' families excluded — see "Unserved Families" list below for details.', 'warn', 6000);
 
       if(!fams.length){
         statusEl.textContent = 'No families to cluster — check your radius setting.';
@@ -1872,6 +1926,14 @@ function runOptimizer(){
           'info', 5000
         );
       }
+
+      // Apply pinned stops — ensure pinned families are included regardless of ridership sampling
+      var pinnedFamilyIds = new Set(S.pinnedStops.map(function(p){ return p.familyId; }));
+      var pinnedFams = S.families.filter(function(f){ return pinnedFamilyIds.has(f.id); });
+      // Add any pinned families that got filtered out by ridership sampling
+      pinnedFams.forEach(function(pf) {
+        if (!fams.some(function(f){ return f.id === pf.id; })) fams.push(pf);
+      });
 
       // Run clustering — always produces exactly numRoutes routes
       S.routes = (clusterMethod === 'sector')
@@ -1903,6 +1965,37 @@ function runOptimizer(){
         );
       }
 
+      // Apply pinned stop assignments — override cluster assignment for pinned families
+      S.pinnedStops.forEach(function(pin) {
+        var family = S.families.find(function(f){ return f.id === pin.familyId; });
+        if (!family) return;
+        // Find target route and stop
+        var targetRoute = S.routes.find(function(r){ return r.name === pin.routeName; });
+        if (!targetRoute) targetRoute = S.routes[0];
+        var targetStop = targetRoute.stops.find(function(s){ return s.id === pin.stopId; });
+        if (!targetStop) {
+          // Stop may have been recreated — find by name
+          targetStop = targetRoute.stops.find(function(s){ return s.name === pin.stopName; });
+        }
+        if (!targetStop) {
+          // Create the stop if it doesn't exist
+          targetStop = {id:pin.stopId, name:pin.stopName, address:pin.stopName, lat:family.lat, lon:family.lon, riders:[]};
+          targetRoute.stops.push(targetStop);
+        }
+        // Remove family from any other stop
+        S.routes.forEach(function(r){
+          r.stops.forEach(function(s){
+            s.riders = s.riders.filter(function(rid){ return rid.id !== family.id; });
+          });
+        });
+        // Add to pinned stop
+        if (!targetStop.riders.some(function(r){ return r.id === family.id; })) {
+          targetStop.riders.push(family);
+        }
+        // Mark so UI can show pin icon
+        family._pinned = true;
+      });
+
       // Anchor critical community stops
       injectCommunityStops(maxWalk);
 
@@ -1919,7 +2012,13 @@ function runOptimizer(){
       updateSidebar();
       saveSession();
 
-      statusEl.innerHTML = '<span style="color:var(--green);font-weight:600">✓ ' + S.routes.length + ' routes generated</span>';
+      renderUnservedFamilies();
+      renderPinnedStopsList();
+      updatePinStopSelect();
+      statusEl.innerHTML = '<span style="color:var(--green);font-weight:600">✓ ' + S.routes.length + ' routes generated'
+        + (S.unservedFamilies.length ? ' · <span style="color:var(--red)">' + S.unservedFamilies.length + ' unserved</span>' : '')
+        + (S.pinnedStops.length ? ' · <span style="color:var(--amber)">📍 ' + S.pinnedStops.length + ' pinned</span>' : '')
+        + '</span>';
 
     } catch(err) {
       console.error('Optimizer error:', err);
@@ -2246,6 +2345,182 @@ function buildStops(families, maxStops, maxWalk) {
 // ══════════════════════════════════════════════════════════════
 // EDITOR
 // ══════════════════════════════════════════════════════════════
+// ── UNSERVED FAMILIES ────────────────────────────────────────
+function renderUnservedFamilies() {
+  var card = document.getElementById('unserved-card');
+  var tbody = document.getElementById('unserved-tbody');
+  var countEl = document.getElementById('unserved-count');
+  if (!card || !tbody) return;
+
+  if (!S.unservedFamilies.length) {
+    card.style.display = 'none';
+    return;
+  }
+
+  card.style.display = '';
+  countEl.textContent = S.unservedFamilies.length;
+  var schoolGeo = roughGeocode(S.school.address || 'Seattle WA');
+
+  tbody.innerHTML = S.unservedFamilies.map(function(f) {
+    var dist = haversine(f, schoolGeo).toFixed(1);
+    var reason = f.excludeReason || 'Outside radius or boundary limit';
+    return '<tr>'
+      + '<td style="font-weight:500">' + (f.name||'—') + '</td>'
+      + '<td style="font-size:11px;color:var(--text2)">' + f.address + '</td>'
+      + '<td><span class="badge badge-amber">' + reason + '</span></td>'
+      + '<td style="font-family:var(--font-mono);font-size:12px">' + dist + ' mi</td>'
+      + '</tr>';
+  }).join('');
+}
+
+function downloadUnservedCSV() {
+  if (!S.unservedFamilies.length) return;
+  var schoolGeo = roughGeocode(S.school.address || 'Seattle WA');
+  var rows = [['Name','Address','Grade','Distance from School (mi)','Reason Excluded']];
+  S.unservedFamilies.forEach(function(f) {
+    rows.push([
+      f.name||'',
+      f.address||'',
+      f.grade||'',
+      haversine(f, schoolGeo).toFixed(1),
+      f.excludeReason||'Outside radius or boundary'
+    ]);
+  });
+  var csv = rows.map(function(r) {
+    return r.map(function(c){ return '"'+String(c).replace(/"/g,'""')+'"'; }).join(',');
+  }).join('
+');
+  var a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download = 'unserved_families_' + (S.school.name||'school').replace(/[^a-z0-9]/gi,'_') + '.csv';
+  a.click();
+  toast('Unserved families list downloaded.', 'success');
+}
+
+// ── PINNED STOPS ──────────────────────────────────────────────
+function updatePinStopSelect() {
+  var sel = document.getElementById('pin-stop-select');
+  if (!sel) return;
+  var opts = '<option value="">— select a stop —</option>';
+  S.routes.forEach(function(r) {
+    r.stops.forEach(function(s) {
+      opts += '<option value="' + s.id + '|' + r.name + '">' + r.name + ' → ' + s.name + '</option>';
+    });
+  });
+  sel.innerHTML = opts;
+}
+
+function renderPinSearch() {
+  var q = (document.getElementById('pin-family-search').value||'').toLowerCase().trim();
+  var resultsEl = document.getElementById('pin-search-results');
+  if (!resultsEl) return;
+  if (!q) { resultsEl.innerHTML = ''; return; }
+
+  var matches = S.families.filter(function(f) {
+    return (f.name||'').toLowerCase().includes(q) ||
+           (f.address||'').toLowerCase().includes(q);
+  }).slice(0, 8);
+
+  if (!matches.length) {
+    resultsEl.innerHTML = '<span style="color:var(--text3)">No families found matching "' + q + '"</span>';
+    return;
+  }
+
+  resultsEl.innerHTML = '<div style="background:var(--surface3);border:1px solid var(--border);border-radius:var(--r2);overflow:hidden">'
+    + matches.map(function(f) {
+        var isPinned = S.pinnedStops.some(function(p){ return p.familyId === f.id; });
+        return '<div style="padding:7px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;cursor:pointer;font-size:12px" onclick="selectFamilyForPin('' + f.id + '')">'
+          + '<div><strong>' + (f.name||'(no name)') + '</strong> <span style="color:var(--text3)">' + f.address + '</span></div>'
+          + (isPinned ? '<span class="badge badge-amber">📍 Pinned</span>' : '<span style="color:var(--blue)">Select →</span>')
+          + '</div>';
+      }).join('')
+    + '</div>';
+}
+
+var _selectedPinFamilyId = null;
+function selectFamilyForPin(familyId) {
+  _selectedPinFamilyId = familyId;
+  var f = S.families.find(function(f){ return f.id === familyId; });
+  if (!f) return;
+  var searchEl = document.getElementById('pin-family-search');
+  if (searchEl) searchEl.value = (f.name||f.address||'');
+  document.getElementById('pin-search-results').innerHTML =
+    '<div style="background:var(--blue-light);border:1px solid #bfdbfe;border-radius:var(--r);padding:7px 12px;font-size:12px;color:#1e40af">'
+    + '✓ Selected: <strong>' + (f.name||f.address) + '</strong> — now choose a stop above and click Pin family.'
+    + '</div>';
+}
+
+function addPin() {
+  if (!_selectedPinFamilyId) { toast('Search for and select a family first.','warn'); return; }
+  var sel = document.getElementById('pin-stop-select');
+  if (!sel || !sel.value) { toast('Please select a stop to pin this family to.','warn'); return; }
+
+  var parts = sel.value.split('|');
+  var stopId = parts[0];
+  var routeName = parts[1];
+  var f = S.families.find(function(f){ return f.id === _selectedPinFamilyId; });
+  if (!f) return;
+
+  // Find stop name
+  var stopName = '';
+  S.routes.forEach(function(r) {
+    r.stops.forEach(function(s){ if(s.id===stopId) stopName=s.name; });
+  });
+
+  // Remove existing pin for this family if any
+  S.pinnedStops = S.pinnedStops.filter(function(p){ return p.familyId !== _selectedPinFamilyId; });
+
+  S.pinnedStops.push({
+    familyId:      f.id,
+    familyName:    f.name||f.address,
+    familyAddress: f.address,
+    stopId:        stopId,
+    stopName:      stopName,
+    routeName:     routeName
+  });
+
+  // Update the family's pinned stop so re-runs respect it
+  f.pinnedStopId = stopId;
+  f.pinnedRouteName = routeName;
+
+  saveSession();
+  renderPinnedStopsList();
+  _selectedPinFamilyId = null;
+  if(document.getElementById('pin-family-search')) document.getElementById('pin-family-search').value='';
+  if(document.getElementById('pin-search-results')) document.getElementById('pin-search-results').innerHTML='';
+  toast('Family pinned to ' + stopName + ' on ' + routeName + '.', 'success');
+}
+
+function removePin(familyId) {
+  S.pinnedStops = S.pinnedStops.filter(function(p){ return p.familyId !== familyId; });
+  var f = S.families.find(function(f){ return f.id === familyId; });
+  if (f) { delete f.pinnedStopId; delete f.pinnedRouteName; }
+  saveSession();
+  renderPinnedStopsList();
+  toast('Pin removed.', 'info');
+}
+
+function renderPinnedStopsList() {
+  var el = document.getElementById('pinned-stops-body');
+  if (!el) return;
+  if (!S.pinnedStops.length) {
+    el.innerHTML = '<div style="font-size:13px;color:var(--text3)">No families pinned yet. Use the search below to find a family and pin them to a stop.</div>';
+    return;
+  }
+  el.innerHTML = '<div class="tbl-wrap"><table>'
+    + '<thead><tr><th>Family</th><th>Address</th><th>Pinned to stop</th><th>Route</th><th></th></tr></thead><tbody>'
+    + S.pinnedStops.map(function(p) {
+        return '<tr>'
+          + '<td style="font-weight:500">📍 ' + escHtml(p.familyName) + '</td>'
+          + '<td style="font-size:11px;color:var(--text2)">' + escHtml(p.familyAddress) + '</td>'
+          + '<td><span class="badge badge-blue">' + escHtml(p.stopName) + '</span></td>'
+          + '<td style="font-size:12px">' + escHtml(p.routeName) + '</td>'
+          + '<td><button class="btn btn-sm" style="font-size:11px;color:var(--red);border-color:var(--red)" onclick="removePin('' + p.familyId + '')">✕ Remove</button></td>'
+          + '</tr>';
+      }).join('')
+    + '</tbody></table></div>';
+}
+
 function renderMetrics(){
   const totalFams=S.families.length,totalStops=S.routes.reduce((s,r)=>s+r.stops.length,0);
   const rideMax=S.vendor.rideMax||90, rideTarget=S.vendor.rideTarget||60;
